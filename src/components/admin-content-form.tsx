@@ -6,6 +6,7 @@ import type { BmiCategory } from "@/lib/bmi";
 export type AdminContentFormValues = {
   title: string;
   description: string;
+  content: string;
   type: ContentType;
   planLevel: string;
   dayNumber: string;
@@ -46,9 +47,19 @@ export function AdminContentForm({
         <textarea
           value={values.description}
           onChange={(event) => onChange({ ...values, description: event.target.value })}
-          className="dark-input min-h-32 w-full"
-          placeholder="Describe the workout, diet guidance, or tip in a beginner-friendly way."
+          className="dark-input min-h-24 w-full text-sm"
+          placeholder="Short summary for the dashboard card."
           required
+        />
+      </div>
+
+      <div>
+        <label className="form-label">Detailed Content (Optional)</label>
+        <textarea
+          value={values.content}
+          onChange={(event) => onChange({ ...values, content: event.target.value })}
+          className="dark-input min-h-48 w-full text-sm"
+          placeholder="Full workout routine, meal recipe, or detailed fitness tip."
         />
       </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { collection, query, where, getDocs, deleteDoc, doc, addDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -19,6 +19,14 @@ type Transaction = {
 };
 
 export default function HistoryPage() {
+  return (
+    <Suspense fallback={<PageLoader label="Loading history..." />}>
+      <HistoryPageContent />
+    </Suspense>
+  );
+}
+
+function HistoryPageContent() {
   const router = useRouter();
   const { user, profile, loading, canRender, refreshProfile, subscriptionState } = useRouteProtection("authenticated");
   const [transactions, setTransactions] = useState<Transaction[]>([]);

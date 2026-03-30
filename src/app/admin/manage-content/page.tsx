@@ -25,6 +25,7 @@ const initialFilters: FilterState = {
 const emptyEditor: AdminContentFormValues = {
   title: "",
   description: "",
+  content: "",
   type: "workout",
   planLevel: "1",
   dayNumber: "1",
@@ -104,6 +105,7 @@ export default function ManageContentPage() {
     setEditor({
       title: item.title,
       description: item.description,
+      content: item.content || "",
       type: item.type,
       planLevel: String(item.planLevel),
       dayNumber: String(item.dayNumber),
@@ -127,6 +129,7 @@ export default function ManageContentPage() {
         {
           title: editor.title,
           description: editor.description,
+          content: editor.content,
           type: editor.type,
           planLevel: Number(editor.planLevel),
           dayNumber: Number(editor.dayNumber),

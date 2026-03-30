@@ -6,6 +6,7 @@ export type ContentItem = {
   id: string;
   title: string;
   description: string;
+  content?: string;
   type: ContentType;
   planLevel: number;
   dayNumber: number;

@@ -12,6 +12,7 @@ import { dismissToast, notifyError, notifyLoading, notifySuccess } from "@/lib/t
 const initialForm: AdminContentFormValues = {
   title: "",
   description: "",
+  content: "",
   type: "workout",
   planLevel: "1",
   dayNumber: "1",
