@@ -1,17 +1,22 @@
 "use client";
 
+import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useRouteProtection } from "@/hooks/use-route-protection";
 
 export default function PrivacyPage() {
+  return (
+    <Suspense fallback={<PageLoader label="Loading privacy policy..." />}>
+      <PrivacyPageContent />
+    </Suspense>
+  );
+}
+
+function PrivacyPageContent() {
   const { loading, canRender } = useRouteProtection("authenticated");
 
   if (loading || !canRender) {
-    return (
-      <main className="flex min-h-screen items-center justify-center px-4">
-        <div className="loading-card">Loading privacy policy...</div>
-      </main>
-    );
+    return <PageLoader label="Loading privacy policy..." />;
   }
 
   return (
@@ -23,5 +28,13 @@ export default function PrivacyPage() {
         </p>
       </div>
     </AppShell>
+  );
+}
+
+function PageLoader({ label }: { label: string }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center px-4">
+      <div className="loading-card">{label}</div>
+    </main>
   );
 }

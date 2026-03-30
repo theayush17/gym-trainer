@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
@@ -9,6 +9,14 @@ import { useRouteProtection } from "@/hooks/use-route-protection";
 import { dismissToast, notifyError, notifyLoading, notifySuccess } from "@/lib/toast";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<PageLoader label="Checking login status..." />}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageContent() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,11 +48,7 @@ export default function LoginPage() {
   };
 
   if (authLoading || !canRender) {
-    return (
-      <main className="flex min-h-screen items-center justify-center px-4">
-        <div className="loading-card">Checking login status...</div>
-      </main>
-    );
+    return <PageLoader label="Checking login status..." />;
   }
 
   return (
@@ -88,6 +92,14 @@ export default function LoginPage() {
           </Link>
         </p>
       </div>
+    </main>
+  );
+}
+
+function PageLoader({ label }: { label: string }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center px-4">
+      <div className="loading-card">{label}</div>
     </main>
   );
 }

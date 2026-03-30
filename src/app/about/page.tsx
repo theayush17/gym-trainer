@@ -1,9 +1,18 @@
 "use client";
 
+import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useRouteProtection } from "@/hooks/use-route-protection";
 
 export default function AboutPage() {
+  return (
+    <Suspense fallback={<LoadingPage label="Loading About Us..." />}>
+      <AboutPageContent />
+    </Suspense>
+  );
+}
+
+function AboutPageContent() {
   const { loading, canRender } = useRouteProtection("authenticated");
 
   if (loading || !canRender) {

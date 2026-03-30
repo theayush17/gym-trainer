@@ -1,28 +1,51 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { db } from "@/lib/firebase";
 import { getPlanById, getPlanLabelFromLevel, getPlanLevelFromPlanId } from "@/lib/plans";
 import { useRouteProtection } from "@/hooks/use-route-protection";
 import type { ContentItem } from "@/lib/content";
 import { getBmiCategoryLabel, getContentTypeLabel, getPlanLevelLabel, getPublishedDays, isContentVisible } from "@/lib/content";
-import { getCurrentSubscriptionDay, getSubscriptionStartDate } from "@/lib/auth";
+import {
+  buildSubscriptionUpdate,
+  canRenewSubscription,
+  getCurrentSubscriptionDay,
+  getEffectiveSubscription,
+  getExpiryCountdown,
+  getSubscriptionExpiryDate,
+  getSubscriptionStartDate,
+  hasPendingRenewal
+} from "@/lib/auth";
 import { getBmiCategory } from "@/lib/bmi";
 import { AppShell } from "@/components/app-shell";
-import { notifyError, notifyWarning } from "@/lib/toast";
+import { dismissToast, notifyError, notifyLoading, notifySuccess, notifyWarning } from "@/lib/toast";
 
 export default function DashboardPage() {
-  const { profile, loading, canRender, subscriptionState } = useRouteProtection("dashboard");
+  return (
+    <Suspense fallback={<PageLoader label="Loading dashboard..." />}>
+      <DashboardPageContent />
+    </Suspense>
+  );
+}
+
+function DashboardPageContent() {
+  const { user, profile, loading, canRender, refreshProfile, subscriptionState } = useRouteProtection("dashboard");
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
   const [allVisibleItems, setAllVisibleItems] = useState<ContentItem[]>([]);
   const [contentLoading, setContentLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<number | "">("");
-  const activePlan = getPlanById(profile?.subscription?.planId);
-  const userPlanLevel = profile?.subscription?.planLevel || getPlanLevelFromPlanId(profile?.subscription?.planId);
+  const [renewing, setRenewing] = useState(false);
+  const activeSubscription = getEffectiveSubscription(profile?.subscription);
+  const activePlan = getPlanById(activeSubscription?.planId);
+  const userPlanLevel = activeSubscription?.planLevel || getPlanLevelFromPlanId(activeSubscription?.planId);
   const derivedBmiCategory = profile?.bmiCategory || (profile?.bmi ? getBmiCategory(profile.bmi) : undefined);
   const computedSubscriptionDay = getCurrentSubscriptionDay(profile?.subscription);
   const currentDay = computedSubscriptionDay || (subscriptionState === "active" ? 1 : 0);
+  const expiryCountdown = getExpiryCountdown(profile?.subscription);
   const derivedStartDate = getSubscriptionStartDate(profile?.subscription);
+  const expiryDate = getSubscriptionExpiryDate(profile?.subscription);
+  const renewalQueued = hasPendingRenewal(profile?.subscription);
+  const canRenew = canRenewSubscription(profile?.subscription);
   const subscriptionStartDate = useMemo(() => {
     if (!derivedStartDate) {
       return "Not available";
@@ -30,10 +53,62 @@ export default function DashboardPage() {
 
     return derivedStartDate.toLocaleDateString();
   }, [derivedStartDate]);
+  const subscriptionExpiryLabel = useMemo(() => {
+    if (!expiryDate) {
+      return "Not available";
+    }
+
+    return expiryDate.toLocaleString();
+  }, [expiryDate]);
+  const renewalStartLabel = useMemo(() => {
+    if (!profile?.subscription?.renewalStartDate) {
+      return "";
+    }
+
+    const startDate = new Date(profile.subscription.renewalStartDate);
+    return Number.isNaN(startDate.getTime()) ? "" : startDate.toLocaleString();
+  }, [profile?.subscription?.renewalStartDate]);
   const publishedDays = useMemo(() => getPublishedDays(allVisibleItems), [allVisibleItems]);
   const workouts = contentItems.filter((item) => item.type === "workout");
   const diets = contentItems.filter((item) => item.type === "diet");
   const tips = contentItems.filter((item) => item.type === "tip");
+
+  const handleRenewPlan = async () => {
+    if (!user?.uid || !activeSubscription?.planId) {
+      return;
+    }
+
+    setRenewing(true);
+    const loadingToast = notifyLoading("Scheduling renewal...");
+
+    try {
+      const { doc, setDoc } = await import("firebase/firestore");
+
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          subscription: buildSubscriptionUpdate({
+            currentSubscription: profile?.subscription,
+            planId: activeSubscription.planId,
+            planLevel: activeSubscription.planLevel || getPlanLevelFromPlanId(activeSubscription.planId)
+          }),
+          updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+
+      await refreshProfile();
+      dismissToast(loadingToast);
+      notifySuccess("Renewal scheduled. Your next plan cycle will start when the current one expires.");
+    } catch (error) {
+      console.error("Renewal error:", error);
+      dismissToast(loadingToast);
+      notifyError(error instanceof Error ? error.message : "Failed to schedule renewal");
+    } finally {
+      setRenewing(false);
+    }
+  };
+
   const handleDayChange = (value: string) => {
     if (!value) {
       setSelectedDay("");
@@ -129,11 +204,7 @@ export default function DashboardPage() {
   }, [canRender, derivedBmiCategory, loading, selectedDay, userPlanLevel]);
 
   if (loading || !canRender) {
-    return (
-      <main className="flex min-h-screen items-center justify-center px-4">
-        <div className="panel-surface text-muted px-6 py-4 text-sm">Loading dashboard...</div>
-      </main>
-    );
+    return <PageLoader label="Loading dashboard..." />;
   }
 
   return (
@@ -144,8 +215,25 @@ export default function DashboardPage() {
             <p className="text-soft text-sm">Active Plan</p>
             <h2 className="heading-primary mt-2 text-xl font-semibold">{activePlan?.name || "No active plan"}</h2>
             <p className="text-muted mt-2 text-sm">
-              {profile?.subscription?.planId || "-"} {userPlanLevel ? `(${getPlanLabelFromLevel(userPlanLevel)})` : ""}
+              {activeSubscription?.planId || "-"} {userPlanLevel ? `(${getPlanLabelFromLevel(userPlanLevel)})` : ""}
             </p>
+            <p className="text-muted mt-3 text-sm">{expiryCountdown} day{expiryCountdown === 1 ? "" : "s"} left before expiry.</p>
+            <p className="text-faint mt-1 text-xs">Expires on {subscriptionExpiryLabel}</p>
+            {renewalQueued ? (
+              <div className="mt-4 rounded-2xl border border-emerald-200/80 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-200">
+                Renewal scheduled for {renewalStartLabel || "the exact expiry time"}.
+              </div>
+            ) : null}
+            {canRenew ? (
+              <button
+                type="button"
+                onClick={() => void handleRenewPlan()}
+                disabled={renewing}
+                className="dark-button-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {renewing ? "Scheduling..." : "Renew Plan"}
+              </button>
+            ) : null}
           </div>
           <div className="panel-surface">
             <p className="text-soft text-sm">Current Day</p>
@@ -200,6 +288,14 @@ export default function DashboardPage() {
         </section>
       </div>
     </AppShell>
+  );
+}
+
+function PageLoader({ label }: { label: string }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center px-4">
+      <div className="panel-surface text-muted px-6 py-4 text-sm">{label}</div>
+    </main>
   );
 }
 

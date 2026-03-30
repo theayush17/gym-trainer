@@ -1,17 +1,22 @@
 "use client";
 
+import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useRouteProtection } from "@/hooks/use-route-protection";
 
 export default function HelpPage() {
+  return (
+    <Suspense fallback={<PageLoader label="Loading help page..." />}>
+      <HelpPageContent />
+    </Suspense>
+  );
+}
+
+function HelpPageContent() {
   const { loading, canRender } = useRouteProtection("authenticated");
 
   if (loading || !canRender) {
-    return (
-      <main className="flex min-h-screen items-center justify-center px-4">
-        <div className="loading-card">Loading help page...</div>
-      </main>
-    );
+    return <PageLoader label="Loading help page..." />;
   }
 
   return (
@@ -23,5 +28,13 @@ export default function HelpPage() {
         </p>
       </div>
     </AppShell>
+  );
+}
+
+function PageLoader({ label }: { label: string }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center px-4">
+      <div className="loading-card">{label}</div>
+    </main>
   );
 }

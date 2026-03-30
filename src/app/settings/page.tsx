@@ -1,16 +1,23 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import Link from "next/link";
+import { FormEvent, Suspense, useState } from "react";
 import { EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail, updatePassword } from "firebase/auth";
 import { AppShell } from "@/components/app-shell";
 import { useRouteProtection } from "@/hooks/use-route-protection";
 import { auth } from "@/lib/firebase";
-import { useThemeContext } from "@/components/theme-provider";
 import { dismissToast, notifyError, notifyLoading, notifySuccess, notifyWarning } from "@/lib/toast";
 
 export default function SettingsPage() {
+  return (
+    <Suspense fallback={<PageLoader label="Loading settings..." />}>
+      <SettingsPageContent />
+    </Suspense>
+  );
+}
+
+function SettingsPageContent() {
   const { user, loading, canRender } = useRouteProtection("authenticated");
-  const { theme, toggleTheme } = useThemeContext();
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -72,49 +79,46 @@ export default function SettingsPage() {
   };
 
   if (loading || !canRender) {
-    return (
-      <main className="flex min-h-screen items-center justify-center px-4">
-        <div className="loading-card">Loading settings...</div>
-      </main>
-    );
+    return <PageLoader label="Loading settings..." />;
   }
 
   return (
     <AppShell title="Settings">
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="panel-surface">
-          <h2 className="heading-primary text-2xl font-bold">Theme</h2>
-          <p className="text-muted mt-2 text-sm">Switch between light and dark mode.</p>
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="dark-button-primary mt-6 px-5 py-3 text-sm font-semibold"
-          >
-            Switch to {theme === "dark" ? "Light" : "Dark"} Mode
-          </button>
-        </section>
-
+      <div className="grid gap-6 xl:grid-cols-2">
         <section className="panel-surface">
           <h2 className="heading-primary text-2xl font-bold">Forgot Password</h2>
-          <p className="text-muted mt-2 text-sm">Send yourself a password reset email instantly.</p>
+          <p className="text-muted mt-2 text-sm">Send a reset link to {user?.email || "your email"}.</p>
           <button
             type="button"
             onClick={() => void handleResetEmail()}
             disabled={sendingReset}
-            className="dark-button-secondary mt-6 px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70"
+            className="dark-button-secondary mt-6 w-full px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70"
           >
             {sendingReset ? "Sending..." : "Send Reset Email"}
           </button>
         </section>
 
-        <section className="panel-surface lg:col-span-2">
+        <section className="panel-surface">
+          <h2 className="heading-primary text-2xl font-bold">Help / Feedback</h2>
+          <p className="text-muted mt-2 text-sm">
+            For issues with plans, profile data, workouts, or reminders, reach out through your support channel or review the guidance page.
+          </p>
+          <Link
+            href="/help"
+            className="dark-button-secondary mt-6 inline-flex w-full items-center justify-center px-5 py-3 text-sm font-semibold"
+          >
+            Open Help Details
+          </Link>
+        </section>
+
+        <section className="panel-surface xl:col-span-2">
           <h2 className="heading-primary text-2xl font-bold">Change Password</h2>
           <p className="text-muted mt-2 text-sm">Verify your current password before setting a new one.</p>
 
           <form className="mt-6 grid gap-5 md:grid-cols-3" onSubmit={handleChangePassword}>
             <input
               type="password"
-              placeholder="Old Password"
+              placeholder="Current Password"
               value={oldPassword}
               onChange={(event) => setOldPassword(event.target.value)}
               className="dark-input"
@@ -148,5 +152,13 @@ export default function SettingsPage() {
         </section>
       </div>
     </AppShell>
+  );
+}
+
+function PageLoader({ label }: { label: string }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center px-4">
+      <div className="loading-card">{label}</div>
+    </main>
   );
 }

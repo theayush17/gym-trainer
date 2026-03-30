@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import Link from "next/link";
 import { calculateBmi, getBmiCategory } from "@/lib/bmi";
 import { auth, db } from "@/lib/firebase";
@@ -31,6 +31,14 @@ const initialForm: RegisterForm = {
 };
 
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={<PageLoader label="Checking account status..." />}>
+      <RegisterPageContent />
+    </Suspense>
+  );
+}
+
+function RegisterPageContent() {
   const router = useRouter();
   const [form, setForm] = useState<RegisterForm>(initialForm);
   const [loading, setLoading] = useState(false);
@@ -98,11 +106,7 @@ export default function RegisterPage() {
   };
 
   if (authLoading || !canRender) {
-    return (
-      <main className="flex min-h-screen items-center justify-center px-4">
-        <div className="loading-card">Checking account status...</div>
-      </main>
-    );
+    return <PageLoader label="Checking account status..." />;
   }
 
   return (
@@ -200,6 +204,14 @@ export default function RegisterPage() {
           </Link>
         </p>
       </div>
+    </main>
+  );
+}
+
+function PageLoader({ label }: { label: string }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center px-4">
+      <div className="loading-card">{label}</div>
     </main>
   );
 }
