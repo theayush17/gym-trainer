@@ -182,37 +182,48 @@ export function buildSubscriptionUpdate({
   const now = new Date();
   const activeSubscription = getEffectiveSubscription(currentSubscription);
   const activeExpiryDate = getSubscriptionExpiryDate(currentSubscription);
-  const isActiveSubscription =
-    getSubscriptionState(currentSubscription) === "active" &&
-    !!activeSubscription?.planId &&
-    !!activeExpiryDate &&
-    activeExpiryDate.getTime() > now.getTime();
+  const activeLevel = activeSubscription?.planLevel ?? 0;
+  
+  const subscriptionState = getSubscriptionState(currentSubscription);
+  const isExpired = subscriptionState !== "active";
+  const daysRemaining = getExpiryCountdown(currentSubscription);
+  const withinRenewalWindow = daysRemaining <= 2;
 
-  if (isActiveSubscription) {
-    const currentStartDate = getSubscriptionStartDate(currentSubscription);
-
+  // UPGRADE LOGIC (Immediate) or RENEWAL LOGIC (Immediate if within window or expired)
+  // This covers Rule 1 (Upgrade), Rule 5 (Renew Same), Rule 6 (Renew Upgrade), Rule 7 (Renew Downgrade)
+  if (isExpired || planLevel > activeLevel || withinRenewalWindow) {
     return {
-      planId: activeSubscription.planId,
-      planLevel: activeSubscription.planLevel ?? planLevel,
+      planId,
+      planLevel,
       status: "active",
-      expiry: activeExpiryDate.toISOString(),
-      subscriptionStartDate: currentStartDate?.toISOString() || now.toISOString(),
-      renewalPlanId: planId,
-      renewalPlanLevel: planLevel,
-      renewalStartDate: activeExpiryDate.toISOString(),
-      renewalExpiry: addSubscriptionDuration(activeExpiryDate).toISOString()
+      expiry: addSubscriptionDuration(now).toISOString(),
+      subscriptionStartDate: now.toISOString(),
+      renewalPlanId: "",
+      renewalPlanLevel: 0,
+      renewalStartDate: "",
+      renewalExpiry: ""
     };
   }
 
-  return {
+  // DOWNGRADE LOGIC (Deferred)
+  // Rule 2: If selecting a lower plan and NOT in the renewal window
+  if (planLevel < activeLevel) {
+    const effectiveExpiry = activeExpiryDate || now;
+    return {
+      ...currentSubscription,
+      renewalPlanId: planId,
+      renewalPlanLevel: planLevel,
+      renewalStartDate: effectiveExpiry.toISOString(),
+      renewalExpiry: addSubscriptionDuration(effectiveExpiry).toISOString()
+    };
+  }
+
+  // Fallback: No change needed (e.g., selecting same plan outside renewal window)
+  return currentSubscription || {
     planId,
     planLevel,
     status: "active",
     expiry: addSubscriptionDuration(now).toISOString(),
-    subscriptionStartDate: now.toISOString(),
-    renewalPlanId: "",
-    renewalPlanLevel: 0,
-    renewalStartDate: "",
-    renewalExpiry: ""
+    subscriptionStartDate: now.toISOString()
   };
 }

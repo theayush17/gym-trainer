@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
@@ -17,8 +18,20 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body>
+    <html lang="en" className="h-full max-w-full overflow-x-hidden" suppressHydrationWarning>
+      <body className="min-h-screen max-w-full overflow-x-hidden">
+        <Script id="theme-init" strategy="beforeInteractive">
+          {`(() => {
+            try {
+              const savedTheme = localStorage.getItem("theme") || localStorage.getItem("gym-theme");
+              const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+              const theme = savedTheme === "dark" || savedTheme === "light" ? savedTheme : (prefersDark ? "dark" : "light");
+              document.documentElement.classList.toggle("dark", theme === "dark");
+            } catch {
+              document.documentElement.classList.remove("dark");
+            }
+          })();`}
+        </Script>
         <ThemeProvider>
           <SecurityGuard />
           <AppToaster />

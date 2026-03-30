@@ -49,7 +49,7 @@ export function ProfileFieldCard({
             <button
               type="button"
               onClick={onCancel}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-700 text-gray-400 hover:text-white"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-colors duration-300 hover:text-slate-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-white"
             >
               <X className="h-4 w-4" />
             </button>
@@ -59,7 +59,7 @@ export function ProfileFieldCard({
             type="button"
             onClick={editing ? onSave : onEdit}
             disabled={saving}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900 text-gray-300 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white transition-colors duration-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-gray-200"
           >
             {editing ? (
               <span className="text-xs font-semibold">{saving ? "..." : "Save"}</span>

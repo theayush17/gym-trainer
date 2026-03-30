@@ -1,42 +1,70 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // Helper: Check if user is signed in
     function signedIn() {
       return request.auth != null;
     }
 
-    function isTrainerEmail() {
-      return signedIn() && request.auth.token.email == "trainer@example.com";
-    }
-
+    // Helper: Check if user is an admin
     function isAdmin() {
-      return signedIn()
-        && (
-          isTrainerEmail()
-          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
-        );
+      return signedIn() && (
+        (request.auth.token.get('email', '')).lower() == "trainer@gmail.com" || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin')
+      );
     }
 
+    // Users Collection
     match /users/{userId} {
       allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
-      allow create: if signedIn()
-        && request.auth.uid == userId
-        && (
-          !("role" in request.resource.data)
-          || request.resource.data.role == "user"
-          || (isTrainerEmail() && request.resource.data.role == "admin")
-        );
-      allow update: if signedIn()
-        && (
-          (request.auth.uid == userId && request.resource.data.role == resource.data.role)
-          || isAdmin()
-        );
+      allow create: if signedIn() && request.auth.uid == userId;
+      
+      // Allow user to update everything EXCEPT their role, or allow Admin to do anything
+      allow update: if signedIn() && (
+        (request.auth.uid == userId && 
+         request.resource.data.get('role', 'user') == resource.data.get('role', 'user')) || 
+        isAdmin()
+      );
+      
       allow delete: if isAdmin();
     }
 
+    // Content Collection
     match /content/{contentId} {
       allow read: if signedIn();
       allow write: if isAdmin();
+    }
+
+    // Transactions Collection
+    match /transactions/{docId} {
+      // Allow users to read their own transactions. 
+      // If it's a list query, Firestore will use these rules to filter.
+      allow read: if signedIn() && (
+        (resource != null && resource.data.get('userId', '') == request.auth.uid) || 
+        isAdmin()
+      );
+
+      // Allow creating transactions only for oneself
+      allow create: if signedIn() && (
+        (request.resource.data.get('userId', '') == request.auth.uid) || 
+        isAdmin()
+      );
+      
+      // Allow user to delete their own transactions (cleanup)
+      allow delete: if signedIn() && (
+        (resource != null && resource.data.get('userId', '') == request.auth.uid) || 
+        isAdmin()
+      );
+      
+      allow update: if isAdmin();
+    }
+
+    // OTP Verifications Collection
+    match /otp_verifications/{docId} {
+      // Allow any signed-in user to manage their own OTPs
+      allow read, write: if signedIn();
     }
   }
 }

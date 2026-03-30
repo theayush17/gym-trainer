@@ -53,7 +53,7 @@ function LoginPageContent() {
 
   return (
     <main className="auth-shell">
-      <div className="auth-card max-w-md">
+      <div className="auth-card mx-auto max-w-md">
         <div className="mb-8 space-y-2 text-center">
           <h1 className="heading-primary text-3xl font-bold">Welcome back</h1>
           <p className="text-muted text-sm">Login to continue to your subscription plans.</p>

@@ -2,6 +2,7 @@ export type Plan = {
   id: string;
   name: string;
   price: string;
+  numericPrice: number;
   benefits: string[];
   accent: string;
   description: string;
@@ -16,6 +17,7 @@ export const PLANS: Plan[] = [
     id: "plan_100",
     name: "Basic Plan",
     price: "₹100",
+    numericPrice: 100,
     description: "A simple starter membership for consistent training habits.",
     level: 1,
     label: "A",
@@ -26,6 +28,7 @@ export const PLANS: Plan[] = [
     id: "plan_200",
     name: "Pro Plan",
     price: "₹200",
+    numericPrice: 200,
     description: "A stronger plan for users who want better structure and progress.",
     level: 2,
     label: "B",
@@ -36,6 +39,7 @@ export const PLANS: Plan[] = [
     id: "plan_500",
     name: "Premium Plan",
     price: "₹500",
+    numericPrice: 500,
     description: "The most complete fake test subscription for advanced training support.",
     level: 3,
     label: "C",

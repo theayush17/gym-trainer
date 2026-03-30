@@ -59,15 +59,15 @@ export default function AdminLoginPage() {
 
   if (!authResolved || !canRender) {
     return (
-      <main className="flex min-h-screen items-center justify-center px-4">
-        <div className="panel-surface text-muted px-6 py-4 text-sm">Checking admin access...</div>
+      <main className="flex min-h-screen items-center justify-center px-6">
+        <div className="panel-surface text-muted px-6 py-4 text-sm max-w-md mx-auto text-center">Checking admin access...</div>
       </main>
     );
   }
 
   return (
     <main className="auth-shell">
-      <div className="auth-card max-w-md">
+      <div className="auth-card mx-auto max-w-md">
         <div className="mb-8 space-y-2 text-center">
           <h1 className="heading-primary text-3xl font-bold">Trainer Admin Login</h1>
           <p className="text-muted text-sm">Use the trainer account to manage workouts, diets, and tips.</p>

@@ -2,7 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import type { User } from "firebase/auth";
+import { onAuthStateChanged, type User } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { getSubscriptionState, type SubscriptionState, type UserProfile } from "@/lib/auth";
 import { STORAGE_UID_KEY } from "@/lib/plans";
@@ -18,19 +19,36 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const AUTH_INIT_TIMEOUT_MS = 4000;
+const PROFILE_LOAD_TIMEOUT_MS = 5000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   const loadProfile = useCallback(async (uid: string) => {
-    setProfileLoading(true);
-
     try {
-      const { doc, getDoc } = await import("firebase/firestore");
-      const snapshot = await getDoc(doc(db, "users", uid));
+      const snapshot = await withTimeout(getDoc(doc(db, "users", uid)), PROFILE_LOAD_TIMEOUT_MS, "Profile load");
 
       if (!snapshot.exists()) {
         setProfile(null);
@@ -55,49 +73,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    setProfileLoading(true);
     await loadProfile(auth.currentUser.uid);
   }, [loadProfile]);
 
   useEffect(() => {
     let active = true;
     let unsubscribe: (() => void) | undefined;
-
-    const attachAuthListener = async () => {
-      try {
-        const { onAuthStateChanged } = await import("firebase/auth");
-
-        unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-          if (!active) {
-            return;
-          }
-
-          setUser(firebaseUser);
-          setAuthLoading(false);
-
-          if (!firebaseUser) {
-            localStorage.removeItem(STORAGE_UID_KEY);
-            setProfile(null);
-            setProfileLoading(false);
-            console.log("No active Firebase session");
-            return;
-          }
-
-          localStorage.setItem(STORAGE_UID_KEY, firebaseUser.uid);
-          await loadProfile(firebaseUser.uid);
-        });
-      } catch (error) {
-        console.error("Auth listener error:", error);
-        setUser(null);
-        setProfile(null);
-        setAuthLoading(false);
-        setProfileLoading(false);
+    const authTimeoutId = window.setTimeout(() => {
+      if (!active) {
+        return;
       }
-    };
 
-    void attachAuthListener();
+      console.warn("Auth bootstrap timed out. Falling back to signed-out state.");
+      setUser(null);
+      setProfile(null);
+      setAuthLoading(false);
+      setProfileLoading(false);
+    }, AUTH_INIT_TIMEOUT_MS);
+
+    try {
+      unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+        if (!active) {
+          return;
+        }
+
+        window.clearTimeout(authTimeoutId);
+
+        setUser(firebaseUser);
+        setAuthLoading(false);
+
+        if (!firebaseUser) {
+          localStorage.removeItem(STORAGE_UID_KEY);
+          setProfile(null);
+          setProfileLoading(false);
+          console.log("No active Firebase session");
+          return;
+        }
+
+        localStorage.setItem(STORAGE_UID_KEY, firebaseUser.uid);
+        setProfileLoading(true);
+        loadProfile(firebaseUser.uid).catch(console.error);
+      });
+    } catch (error) {
+      console.error("Auth listener error:", error);
+      setUser(null);
+      setProfile(null);
+      setAuthLoading(false);
+      setProfileLoading(false);
+    }
 
     return () => {
       active = false;
+      window.clearTimeout(authTimeoutId);
       unsubscribe?.();
     };
   }, [loadProfile]);

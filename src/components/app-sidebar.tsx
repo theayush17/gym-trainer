@@ -2,7 +2,7 @@
 
 import type { ComponentType } from "react";
 import Link from "next/link";
-import { CreditCard, FileText, FolderKanban, Home, Info, Lock, LogOut, PlusSquare, Settings, User, Users, Dumbbell } from "lucide-react";
+import { CreditCard, FolderKanban, Home, LogOut, PlusSquare, Settings, User, Users, Dumbbell, History } from "lucide-react";
 import { SidebarTooltip } from "@/components/sidebar-tooltip";
 
 type SidebarItem = {
@@ -37,20 +37,12 @@ export function AppSidebar({
         { href: "/admin/add-content", path: "/admin/add-content", label: "Add Content", icon: PlusSquare },
         { href: "/admin/manage-content", path: "/admin/manage-content", label: "Manage Content", icon: FolderKanban },
         { href: "/admin/users", path: "/admin/users", label: "Users", icon: Users },
-        { href: "/profile", path: "/profile", label: "Profile", icon: User },
-        { href: "/settings", path: "/settings", label: "Settings", icon: Settings },
-        { href: "/about", path: "/about", label: "About Us", icon: Info },
-        { href: "/terms", path: "/terms", label: "Terms & Conditions", icon: FileText },
-        { href: "/privacy", path: "/privacy", label: "Privacy Policy", icon: Lock }
+        { href: "/history", path: "/history", label: "History & Transactions", icon: History }
       ]
     : [
         { href: "/dashboard", path: "/dashboard", label: "Dashboard", icon: Home },
         { href: "/plans?upgrade=1", path: "/plans", label: "Plans", icon: CreditCard },
-        { href: "/profile", path: "/profile", label: "Profile", icon: User },
-        { href: "/settings", path: "/settings", label: "Settings", icon: Settings },
-        { href: "/about", path: "/about", label: "About Us", icon: Info },
-        { href: "/terms", path: "/terms", label: "Terms & Conditions", icon: FileText },
-        { href: "/privacy", path: "/privacy", label: "Privacy Policy", icon: Lock }
+        { href: "/history", path: "/history", label: "History & Transactions", icon: History }
       ];
 
   return (
@@ -63,78 +55,86 @@ export function AppSidebar({
       />
 
       <aside
-        className={`fixed left-0 top-0 z-50 flex h-screen w-16 flex-col items-center justify-between border-r border-gray-800 bg-gray-950 px-2 py-6 transition-transform duration-300 md:translate-x-0 ${
+        className={`fixed left-0 top-0 z-50 flex h-screen w-14 flex-col border-r border-slate-200 bg-white px-1 py-3 text-slate-900 transition-all duration-300 dark:border-gray-800 dark:bg-gray-950 dark:text-white md:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex flex-col items-center gap-4">
-          <Link
-            href={isAdmin ? "/admin" : "/dashboard"}
-            onClick={onClose}
-            className="group relative flex h-12 w-12 items-center justify-center rounded-xl bg-gray-900 text-white"
-          >
-            <Dumbbell className="h-4 w-4" />
-            <SidebarTooltip label="Gym Trainer" />
-          </Link>
+        <div className="flex h-full flex-col items-center">
+          <div className="flex flex-col items-center gap-2">
+            <Link
+              href={isAdmin ? "/admin" : "/dashboard"}
+              onClick={onClose}
+              className="group relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-lg bg-slate-100 text-slate-900 transition-all duration-200 hover:scale-110 hover:bg-slate-200 dark:bg-gray-900 dark:text-white dark:hover:bg-gray-800"
+            >
+              <Dumbbell className="h-6 w-6" />
+              <SidebarTooltip label="Gym Trainer" />
+            </Link>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-800 bg-gray-900 text-gray-400 hover:text-white md:hidden"
-          >
-            <span className="sr-only">Close navigation</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
-              <path strokeLinecap="round" d="M6 6l12 12M18 6 6 18" />
-            </svg>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="group relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-all duration-200 hover:scale-110 hover:text-slate-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-white md:hidden"
+            >
+              <span className="sr-only">Close navigation</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+                <path strokeLinecap="round" d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </div>
 
-        <nav className="flex flex-col items-center gap-6 py-6">
-          {navItems.map((item) => {
-            const active = pathname === item.path || pathname.startsWith(`${item.path}/`);
-            const Icon = item.icon;
+          <nav className="flex flex-col items-center justify-start gap-2 py-3">
+            {navItems.map((item) => {
+              const active = pathname === item.path || pathname.startsWith(`${item.path}/`);
+              const Icon = item.icon;
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                className="group relative flex flex-col items-center"
-              >
-                <span
-                  className={`flex h-12 w-12 items-center justify-center rounded-xl transition ${
-                    active
-                      ? "bg-gray-800 text-white"
-                      : "text-gray-400 hover:scale-110 hover:text-white"
-                  }`}
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={onClose}
+                  className="group relative flex h-12 w-12 cursor-pointer items-center justify-center transition-all duration-200"
                 >
-                  <Icon className="h-4 w-4" />
-                </span>
-                {active ? <span className="mt-1 h-1.5 w-1.5 rounded-full bg-white" /> : <span className="mt-1 h-1.5 w-1.5 rounded-full bg-transparent" />}
-                <SidebarTooltip label={item.label} />
-              </Link>
-            );
-          })}
-        </nav>
+                  <Icon
+                    className={`h-6 w-6 transition-colors duration-200 ${
+                      active
+                        ? "text-slate-900 dark:text-white"
+                        : "text-gray-400 group-hover:scale-110 group-hover:text-slate-900 dark:group-hover:text-white"
+                    }`}
+                  />
+                  <SidebarTooltip label={item.label} />
+                </Link>
+              );
+            })}
+          </nav>
 
-        <div className="flex flex-col items-center gap-4">
-          <button
-            type="button"
-            onClick={onLogout}
-            className="group relative flex h-12 w-12 items-center justify-center rounded-xl text-gray-400 transition hover:scale-110 hover:text-white"
-          >
-            <LogOut className="h-4 w-4" />
-            <SidebarTooltip label="Logout" />
-          </button>
+          <div className="mt-auto flex flex-col items-center gap-4 pb-[10px]">
+            <Link
+              href="/settings"
+              onClick={onClose}
+              className="group relative flex h-12 w-12 cursor-pointer items-center justify-center transition-all duration-200 hover:scale-110"
+            >
+              <Settings className={`h-6 w-6 transition-colors duration-200 ${pathname === "/settings" ? "text-slate-900 dark:text-white" : "text-gray-400 group-hover:text-slate-900 dark:group-hover:text-white"}`} />
+              <SidebarTooltip label="Settings" />
+            </Link>
 
-          <Link
-            href="/profile"
-            onClick={onClose}
-            className="group relative flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold text-white"
-          >
-            {userInitial}
-            <SidebarTooltip label={profileName || "Profile"} />
-          </Link>
+            <Link
+              href="/profile"
+              onClick={onClose}
+              className="group relative flex h-12 w-12 cursor-pointer items-center justify-center transition-all duration-200 hover:scale-110"
+            >
+              <User className={`h-6 w-6 transition-colors duration-200 ${pathname === "/profile" ? "text-slate-900 dark:text-white" : "text-gray-400 group-hover:text-slate-900 dark:group-hover:text-white"}`} />
+              <SidebarTooltip label={profileName || "Profile"} />
+            </Link>
+
+            <button
+              type="button"
+              onClick={onLogout}
+              className="group relative flex h-12 w-12 cursor-pointer items-center justify-center transition-all duration-200 hover:scale-110"
+            >
+              <LogOut className="h-6 w-6 text-gray-400 transition-colors duration-200 group-hover:text-slate-900 dark:group-hover:text-white" />
+              <SidebarTooltip label="Logout" />
+            </button>
+          </div>
         </div>
       </aside>
     </>

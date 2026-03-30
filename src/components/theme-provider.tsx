@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 type Theme = "light" | "dark";
+const THEME_STORAGE_KEY = "theme";
 
 type ThemeContextValue = {
   theme: Theme;
@@ -13,30 +14,28 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("light");
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem("gym-theme") as Theme | null;
-
-    if (savedTheme === "dark" || savedTheme === "light") {
-      setThemeState(savedTheme);
-      document.documentElement.classList.toggle("dark", savedTheme === "dark");
-      return;
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof window === "undefined") {
+      return "light";
     }
 
-    setThemeState("light");
-    document.documentElement.classList.remove("dark");
-  }, []);
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || localStorage.getItem("gym-theme");
+    if (savedTheme === "dark" || savedTheme === "light") {
+      return savedTheme;
+    }
+
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    document.documentElement.style.colorScheme = theme;
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    localStorage.setItem("gym-theme", theme);
+  }, [theme]);
 
   const setTheme = (nextTheme: Theme) => {
     setThemeState(nextTheme);
-    localStorage.setItem("gym-theme", nextTheme);
-    if (nextTheme === "dark") {
-      document.documentElement.classList.add("dark");
-      return;
-    }
-
-    document.documentElement.classList.remove("dark");
   };
 
   const value = useMemo<ThemeContextValue>(

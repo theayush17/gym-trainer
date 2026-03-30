@@ -19,6 +19,7 @@ import {
 import { getBmiCategory } from "@/lib/bmi";
 import { AppShell } from "@/components/app-shell";
 import { dismissToast, notifyError, notifyLoading, notifySuccess, notifyWarning } from "@/lib/toast";
+import { ContentModal } from "@/components/content-modal";
 
 export default function DashboardPage() {
   return (
@@ -82,7 +83,9 @@ function DashboardPageContent() {
     const loadingToast = notifyLoading("Scheduling renewal...");
 
     try {
-      const { doc, setDoc } = await import("firebase/firestore");
+      const { doc, setDoc, collection, addDoc } = await import("firebase/firestore");
+      const planId = activeSubscription?.planId;
+      const plan = PLANS.find(p => p.id === planId);
 
       await setDoc(
         doc(db, "users", user.uid),
@@ -96,6 +99,15 @@ function DashboardPageContent() {
         },
         { merge: true }
       );
+
+      // Record transaction
+      await addDoc(collection(db, "transactions"), {
+        userId: user.uid,
+        planId: planId,
+        amount: plan?.numericPrice || 0,
+        status: "active",
+        createdAt: new Date().toISOString()
+      });
 
       await refreshProfile();
       dismissToast(loadingToast);
@@ -260,6 +272,65 @@ function DashboardPageContent() {
             </div>
           </div>
           <div className="panel-surface">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-soft text-sm">Active Plan</p>
+                <h2 className="heading-primary mt-1 text-2xl font-bold">
+                  {activePlan?.name || "No active plan"}
+                </h2>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="theme-badge">
+                    {activeSubscription?.planLevel ? `Level ${activeSubscription.planLevel}` : "Level 0"}
+                  </span>
+                  <span className="text-faint text-xs uppercase tracking-widest">
+                    {subscriptionState}
+                  </span>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-soft text-sm">Status</p>
+                <p className={`mt-1 font-bold ${subscriptionState === "active" ? "text-emerald-500" : "text-rose-500"}`}>
+                  {getExpiryCountdown(profile?.subscription)} Days Left
+                </p>
+              </div>
+            </div>
+
+            {getSubscriptionExpiryDate(profile?.subscription) && (
+              <div className="mt-6 border-t border-slate-100 pt-4 dark:border-gray-800">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted">Expiry Date</span>
+                  <span className="font-medium text-slate-700 dark:text-gray-300">
+                    {getSubscriptionExpiryDate(profile?.subscription)?.toLocaleDateString(undefined, { dateStyle: "long" })}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {hasPendingRenewal(profile?.subscription) && (profile?.subscription?.renewalPlanLevel || 0) < (activeSubscription?.planLevel || 0) && (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+                <p className="font-semibold">Plan Downgrade Scheduled</p>
+                <p className="mt-1 opacity-80">
+                  Your plan will downgrade to Plan {getPlanLabelFromLevel(profile?.subscription?.renewalPlanLevel)} after your current plan expires.
+                </p>
+              </div>
+            )}
+
+            {canRenew && (
+              <div className="mt-6 flex items-center justify-between gap-4 rounded-xl bg-blue-50/50 p-4 dark:bg-blue-950/20">
+                <p className="text-xs text-blue-800 dark:text-blue-300">
+                  Your plan is expiring soon. Renew now to maintain your progress!
+                </p>
+                <button
+                  onClick={() => router.push("/plans")}
+                  className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-blue-500"
+                >
+                  Renew Now
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="panel-surface">
             <p className="text-soft text-sm">BMI Profile</p>
             <h2 className="heading-primary mt-2 text-xl font-semibold capitalize">
               {derivedBmiCategory ? getBmiCategoryLabel(derivedBmiCategory) : "-"}
@@ -300,6 +371,8 @@ function PageLoader({ label }: { label: string }) {
 }
 
 function ContentList({ items, loading, currentDay }: { items: ContentItem[]; loading: boolean; currentDay: number | "" }) {
+  const [selectedItem, setSelectedItem] = useState<ContentItem | null>(null);
+
   if (loading) {
     return <div className="panel-muted px-4 py-3 text-sm">Loading content...</div>;
   }
@@ -313,25 +386,38 @@ function ContentList({ items, loading, currentDay }: { items: ContentItem[]; loa
   }
 
   return (
-    <div className="space-y-3">
-      {items.map((item) => (
-        <div key={item.id} className="dark-card px-4 py-4 text-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h4 className="heading-primary text-lg font-semibold">{item.title}</h4>
-              <p className="text-muted mt-1 leading-6">{item.description}</p>
+    <>
+      <div className="space-y-3">
+        {items.map((item) => (
+          <div 
+            key={item.id} 
+            className="dark-card group cursor-pointer px-4 py-4 text-sm transition-all duration-200 hover:scale-[1.02] hover:bg-slate-50/50 dark:hover:bg-gray-900/50"
+            onClick={() => setSelectedItem(item)}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h4 className="heading-primary text-lg font-semibold group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{item.title}</h4>
+                <p className="text-muted mt-1 leading-6 line-clamp-2">{item.description}</p>
+              </div>
+              <span className="theme-badge shrink-0">
+                {getPlanLevelLabel(item.planLevel)}
+              </span>
             </div>
-            <span className="theme-badge">
-              {getPlanLevelLabel(item.planLevel)}
-            </span>
+            <div className="text-faint mt-3 flex flex-wrap gap-2 text-xs uppercase tracking-[0.18em]">
+              <span>{getContentTypeLabel(item.type)}</span>
+              <span>Day {item.dayNumber}</span>
+              <span>{getBmiCategoryLabel(item.bmiCategory)}</span>
+            </div>
           </div>
-          <div className="text-faint mt-3 flex flex-wrap gap-2 text-xs uppercase tracking-[0.18em]">
-            <span>{getContentTypeLabel(item.type)}</span>
-            <span>Day {item.dayNumber}</span>
-            <span>{getBmiCategoryLabel(item.bmiCategory)}</span>
-          </div>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+
+      {selectedItem && (
+        <ContentModal 
+          item={selectedItem} 
+          onClose={() => setSelectedItem(null)} 
+        />
+      )}
+    </>
   );
 }

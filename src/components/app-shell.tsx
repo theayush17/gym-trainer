@@ -8,6 +8,7 @@ import { auth } from "@/lib/firebase";
 import { STORAGE_UID_KEY } from "@/lib/plans";
 import { notifyError, notifySuccess } from "@/lib/toast";
 import { useAuthContext } from "@/components/auth-provider";
+import { AppFooter } from "@/components/app-footer";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useThemeContext } from "@/components/theme-provider";
 
@@ -50,7 +51,7 @@ export function AppShell({ title, children }: AppShellProps) {
   };
 
   return (
-    <div className="flex min-h-screen bg-transparent text-slate-900 dark:text-white">
+    <div className="flex min-h-screen w-full max-w-full overflow-x-hidden bg-transparent text-slate-900 transition-colors duration-300 dark:text-white">
       <AppSidebar
         isAdmin={isAdmin}
         profileName={profile?.name}
@@ -61,8 +62,8 @@ export function AppShell({ title, children }: AppShellProps) {
         onLogout={() => void handleLogout()}
       />
 
-      <div className="flex min-h-screen flex-1 flex-col md:pl-16">
-        <header className="sticky top-0 z-30 border-b border-white/40 bg-white/80 px-4 py-4 backdrop-blur dark:border-gray-800 dark:bg-gray-950 md:px-8">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col md:pl-16">
+        <header className="sticky top-0 z-30 w-full max-w-full border-b border-white/40 bg-white/80 px-4 py-4 backdrop-blur transition-colors duration-300 dark:border-gray-800 dark:bg-gray-950 md:px-6 lg:px-8">
           <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <button
@@ -83,16 +84,15 @@ export function AppShell({ title, children }: AppShellProps) {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={toggleTheme}
-                className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-900 dark:text-slate-100 dark:hover:bg-gray-800"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition-all hover:bg-slate-100 hover:text-slate-900 dark:border-gray-800 dark:bg-gray-900 dark:text-slate-100 dark:hover:bg-gray-800"
+                aria-label="Toggle theme"
               >
-                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                <span className="hidden sm:inline">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+                {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
               </button>
-
               <div className="text-right">
                 <p className="text-soft text-sm">Welcome, {firstName}</p>
                 <p className="text-faint mt-1 text-xs">{todayLabel}</p>
@@ -101,13 +101,11 @@ export function AppShell({ title, children }: AppShellProps) {
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-6 md:px-8">
-          <div className="mx-auto w-full max-w-7xl">{children}</div>
+        <main className="flex-1 w-full max-w-full px-4 py-6 md:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-7xl min-w-0">{children}</div>
         </main>
 
-        <footer className="border-t border-white/40 px-4 py-4 text-center text-sm text-slate-500 dark:border-gray-800 dark:text-gray-400 md:px-8">
-          © 2026 All Rights Reserved
-        </footer>
+        <AppFooter />
       </div>
     </div>
   );

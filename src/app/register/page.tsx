@@ -111,7 +111,7 @@ function RegisterPageContent() {
 
   return (
     <main className="auth-shell">
-      <div className="auth-card max-w-xl">
+      <div className="auth-card mx-auto max-w-xl">
         <div className="mb-8 space-y-2 text-center">
           <h1 className="heading-primary text-3xl font-bold">Create your account</h1>
           <p className="text-muted text-sm">Start with your body metrics and build your training plan.</p>
