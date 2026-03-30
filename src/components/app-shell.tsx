@@ -51,7 +51,7 @@ export function AppShell({ title, children }: AppShellProps) {
   };
 
   return (
-    <div className="flex min-h-screen w-full max-w-full overflow-x-hidden bg-transparent text-slate-900 transition-colors duration-300 dark:text-white">
+    <div className="flex min-h-screen w-full bg-slate-50/50 text-slate-900 transition-colors duration-300 dark:bg-transparent dark:text-white">
       <AppSidebar
         isAdmin={isAdmin}
         profileName={profile?.name}
@@ -63,24 +63,24 @@ export function AppShell({ title, children }: AppShellProps) {
       />
 
       <div className="flex min-h-screen min-w-0 flex-1 flex-col md:pl-16">
-        <header className="sticky top-0 z-30 w-full max-w-full border-b border-white/40 bg-white/80 px-4 py-4 backdrop-blur transition-colors duration-300 dark:border-gray-800 dark:bg-gray-950 md:px-6 lg:px-8">
-          <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4">
+        <header className="sticky top-0 z-30 w-full border-b border-white/40 bg-white/80 px-4 py-4 backdrop-blur transition-colors duration-300 dark:border-gray-800 dark:bg-gray-950/80 md:px-6">
+          <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setSidebarOpen(true)}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-900 dark:text-white dark:hover:bg-gray-800 md:hidden"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-900 dark:text-white dark:hover:bg-gray-800 md:hidden"
               >
                 <span className="sr-only">Open navigation</span>
-                <span className="flex flex-col gap-1.5">
-                  <span className="block h-0.5 w-5 bg-current" />
-                  <span className="block h-0.5 w-5 bg-current" />
-                  <span className="block h-0.5 w-5 bg-current" />
-                </span>
+                <div className="flex flex-col gap-1">
+                  <span className="block h-0.5 w-5 bg-current rounded-full" />
+                  <span className="block h-0.5 w-5 bg-current rounded-full" />
+                  <span className="block h-0.5 w-5 bg-current rounded-full" />
+                </div>
               </button>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-500">Gym Trainer App</p>
-                <h1 className="heading-primary text-2xl font-bold">{title}</h1>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-rose-500">Gym Trainer</p>
+                <h1 className="heading-primary text-xl font-bold leading-none md:text-2xl">{title}</h1>
               </div>
             </div>
 

@@ -112,8 +112,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         localStorage.setItem(STORAGE_UID_KEY, firebaseUser.uid);
-        setProfileLoading(true);
-        loadProfile(firebaseUser.uid).catch(console.error);
+        loadProfile(firebaseUser.uid).catch((err) => {
+          console.error("Async loadProfile error:", err);
+          setProfileLoading(false);
+        });
       });
     } catch (error) {
       console.error("Auth listener error:", error);

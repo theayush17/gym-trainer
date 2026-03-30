@@ -76,6 +76,7 @@ export function useRouteProtection(mode: GuardMode) {
   const canRender =
     !routeLoading &&
     ((mode === "guest" && !authState.user) ||
+      (mode === "home") ||
       (mode === "plans" &&
         !!authState.user &&
         (authState.subscriptionState !== "active" || allowPlanUpgrade)) ||

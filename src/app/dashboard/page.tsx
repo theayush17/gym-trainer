@@ -76,53 +76,6 @@ function DashboardPageContent() {
   const diets = contentItems.filter((item) => item.type === "diet");
   const tips = contentItems.filter((item) => item.type === "tip");
 
-  const handleRenewPlan = async () => {
-    if (!user?.uid || !activeSubscription?.planId) {
-      return;
-    }
-
-    setRenewing(true);
-    const loadingToast = notifyLoading("Scheduling renewal...");
-
-    try {
-      const { doc, setDoc, collection, addDoc } = await import("firebase/firestore");
-      const planId = activeSubscription?.planId;
-      const plan = PLANS.find(p => p.id === planId);
-
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          subscription: buildSubscriptionUpdate({
-            currentSubscription: profile?.subscription,
-            planId: activeSubscription.planId,
-            planLevel: activeSubscription.planLevel || getPlanLevelFromPlanId(activeSubscription.planId)
-          }),
-          updatedAt: new Date().toISOString()
-        },
-        { merge: true }
-      );
-
-      // Record transaction
-      await addDoc(collection(db, "transactions"), {
-        userId: user.uid,
-        planId: planId,
-        amount: plan?.numericPrice || 0,
-        status: "active",
-        createdAt: new Date().toISOString()
-      });
-
-      await refreshProfile();
-      dismissToast(loadingToast);
-      notifySuccess("Renewal scheduled. Your next plan cycle will start when the current one expires.");
-    } catch (error) {
-      console.error("Renewal error:", error);
-      dismissToast(loadingToast);
-      notifyError(error instanceof Error ? error.message : "Failed to schedule renewal");
-    } finally {
-      setRenewing(false);
-    }
-  };
-
   const handleDayChange = (value: string) => {
     if (!value) {
       setSelectedDay("");
@@ -224,31 +177,7 @@ function DashboardPageContent() {
   return (
     <AppShell title="Dashboard">
       <div className="flex flex-col gap-6">
-        <section className="grid gap-6 md:grid-cols-3">
-          <div className="panel-surface">
-            <p className="text-soft text-sm">Active Plan</p>
-            <h2 className="heading-primary mt-2 text-xl font-semibold">{activePlan?.name || "No active plan"}</h2>
-            <p className="text-muted mt-2 text-sm">
-              {activeSubscription?.planId || "-"} {userPlanLevel ? `(${getPlanLabelFromLevel(userPlanLevel)})` : ""}
-            </p>
-            <p className="text-muted mt-3 text-sm">{expiryCountdown} day{expiryCountdown === 1 ? "" : "s"} left before expiry.</p>
-            <p className="text-faint mt-1 text-xs">Expires on {subscriptionExpiryLabel}</p>
-            {renewalQueued ? (
-              <div className="mt-4 rounded-2xl border border-emerald-200/80 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-200">
-                Renewal scheduled for {renewalStartLabel || "the exact expiry time"}.
-              </div>
-            ) : null}
-            {canRenew ? (
-              <button
-                type="button"
-                onClick={() => void handleRenewPlan()}
-                disabled={renewing}
-                className="dark-button-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {renewing ? "Scheduling..." : "Renew Plan"}
-              </button>
-            ) : null}
-          </div>
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="panel-surface">
             <p className="text-soft text-sm">Current Day</p>
             <h2 className="heading-primary mt-2 text-xl font-semibold">
@@ -333,7 +262,7 @@ function DashboardPageContent() {
           </div>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-3">
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <article className="panel-surface">
             <h3 className="heading-primary mb-4 text-xl font-semibold">Workouts</h3>
             <ContentList items={workouts} loading={contentLoading} currentDay={selectedDay} />
