@@ -1,0 +1,241 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { db } from "@/lib/firebase";
+import { getPlanById, getPlanLabelFromLevel, getPlanLevelFromPlanId } from "@/lib/plans";
+import { useRouteProtection } from "@/hooks/use-route-protection";
+import type { ContentItem } from "@/lib/content";
+import { getBmiCategoryLabel, getContentTypeLabel, getPlanLevelLabel, getPublishedDays, isContentVisible } from "@/lib/content";
+import { getCurrentSubscriptionDay, getSubscriptionStartDate } from "@/lib/auth";
+import { getBmiCategory } from "@/lib/bmi";
+import { AppShell } from "@/components/app-shell";
+import { notifyError, notifyWarning } from "@/lib/toast";
+
+export default function DashboardPage() {
+  const { profile, loading, canRender, subscriptionState } = useRouteProtection("dashboard");
+  const [contentItems, setContentItems] = useState<ContentItem[]>([]);
+  const [allVisibleItems, setAllVisibleItems] = useState<ContentItem[]>([]);
+  const [contentLoading, setContentLoading] = useState(true);
+  const [selectedDay, setSelectedDay] = useState<number | "">("");
+  const activePlan = getPlanById(profile?.subscription?.planId);
+  const userPlanLevel = profile?.subscription?.planLevel || getPlanLevelFromPlanId(profile?.subscription?.planId);
+  const derivedBmiCategory = profile?.bmiCategory || (profile?.bmi ? getBmiCategory(profile.bmi) : undefined);
+  const computedSubscriptionDay = getCurrentSubscriptionDay(profile?.subscription);
+  const currentDay = computedSubscriptionDay || (subscriptionState === "active" ? 1 : 0);
+  const derivedStartDate = getSubscriptionStartDate(profile?.subscription);
+  const subscriptionStartDate = useMemo(() => {
+    if (!derivedStartDate) {
+      return "Not available";
+    }
+
+    return derivedStartDate.toLocaleDateString();
+  }, [derivedStartDate]);
+  const publishedDays = useMemo(() => getPublishedDays(allVisibleItems), [allVisibleItems]);
+  const workouts = contentItems.filter((item) => item.type === "workout");
+  const diets = contentItems.filter((item) => item.type === "diet");
+  const tips = contentItems.filter((item) => item.type === "tip");
+  const handleDayChange = (value: string) => {
+    if (!value) {
+      setSelectedDay("");
+      return;
+    }
+
+    const nextDay = Number(value);
+
+    if (nextDay > currentDay) {
+      notifyWarning(`Day ${nextDay} is an advance post. It will unlock on that day only.`);
+      return;
+    }
+
+    setSelectedDay(nextDay);
+  };
+
+  useEffect(() => {
+    if (!currentDay || publishedDays.length === 0) {
+      setSelectedDay("");
+      return;
+    }
+
+    setSelectedDay(publishedDays.includes(currentDay) ? currentDay : "");
+  }, [currentDay, publishedDays]);
+
+  useEffect(() => {
+    if (loading || !canRender) {
+      return;
+    }
+
+    if (!userPlanLevel || !derivedBmiCategory) {
+      setContentItems([]);
+      setAllVisibleItems([]);
+      setContentLoading(false);
+      return;
+    }
+
+    let active = true;
+
+    const loadContent = async () => {
+      setContentLoading(true);
+
+      try {
+        const { collection, getDocs } = await import("firebase/firestore");
+        const snapshot = await getDocs(collection(db, "content"));
+
+        if (!active) {
+          return;
+        }
+
+        const visibleItems = snapshot.docs
+          .map((doc) => {
+            const data = doc.data() as Omit<ContentItem, "id">;
+
+            return {
+              id: doc.id,
+              ...data
+            };
+          })
+          .filter(
+            (item) =>
+              isContentVisible(item.createdAt) &&
+              item.planLevel <= userPlanLevel &&
+              (!item.bmiCategory || item.bmiCategory === derivedBmiCategory)
+          )
+          .sort((first, second) => {
+            const firstTime = first.createdAt ? new Date(first.createdAt).getTime() : 0;
+            const secondTime = second.createdAt ? new Date(second.createdAt).getTime() : 0;
+
+            return secondTime - firstTime;
+          });
+
+        const items = selectedDay ? visibleItems.filter((item) => item.dayNumber === selectedDay) : [];
+
+        setAllVisibleItems(visibleItems);
+        setContentItems(items);
+        console.log("Loaded subscriber content for day:", selectedDay, "plan level:", userPlanLevel, "BMI:", derivedBmiCategory);
+      } catch (error) {
+        console.error("Content fetch error:", error);
+        notifyError(error instanceof Error ? error.message : "Failed to load content");
+      } finally {
+        if (active) {
+          setContentLoading(false);
+        }
+      }
+    };
+
+    void loadContent();
+
+    return () => {
+      active = false;
+    };
+  }, [canRender, derivedBmiCategory, loading, selectedDay, userPlanLevel]);
+
+  if (loading || !canRender) {
+    return (
+      <main className="flex min-h-screen items-center justify-center px-4">
+        <div className="panel-surface text-muted px-6 py-4 text-sm">Loading dashboard...</div>
+      </main>
+    );
+  }
+
+  return (
+    <AppShell title="Dashboard">
+      <div className="flex flex-col gap-6">
+        <section className="grid gap-6 md:grid-cols-3">
+          <div className="panel-surface">
+            <p className="text-soft text-sm">Active Plan</p>
+            <h2 className="heading-primary mt-2 text-xl font-semibold">{activePlan?.name || "No active plan"}</h2>
+            <p className="text-muted mt-2 text-sm">
+              {profile?.subscription?.planId || "-"} {userPlanLevel ? `(${getPlanLabelFromLevel(userPlanLevel)})` : ""}
+            </p>
+          </div>
+          <div className="panel-surface">
+            <p className="text-soft text-sm">Current Day</p>
+            <h2 className="heading-primary mt-2 text-xl font-semibold">
+              Day {currentDay || 0} of 30
+            </h2>
+            <p className="text-muted mt-2 text-sm">
+              Start date: {subscriptionStartDate}
+            </p>
+            <div className="mt-4">
+              <label className="text-soft mb-2 block text-sm">View Published Day</label>
+              <select
+                value={selectedDay === "" ? "" : String(selectedDay)}
+                onChange={(event) => handleDayChange(event.target.value)}
+                className="dark-input w-full"
+              >
+                <option value="">Select posted day</option>
+                {publishedDays.map((day) => (
+                  <option key={day} value={String(day)}>
+                    Day {day}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="panel-surface">
+            <p className="text-soft text-sm">BMI Profile</p>
+            <h2 className="heading-primary mt-2 text-xl font-semibold capitalize">
+              {derivedBmiCategory ? getBmiCategoryLabel(derivedBmiCategory) : "-"}
+            </h2>
+            <p className="text-muted mt-2 text-sm">
+              BMI score: {profile?.bmi || "-"} | Status: {subscriptionState}
+            </p>
+          </div>
+        </section>
+
+        <section className="grid gap-6 lg:grid-cols-3">
+          <article className="panel-surface">
+            <h3 className="heading-primary mb-4 text-xl font-semibold">Workouts</h3>
+            <ContentList items={workouts} loading={contentLoading} currentDay={selectedDay} />
+          </article>
+
+          <article className="panel-surface">
+            <h3 className="heading-primary mb-4 text-xl font-semibold">Diet Plans</h3>
+            <ContentList items={diets} loading={contentLoading} currentDay={selectedDay} />
+          </article>
+
+          <article className="panel-surface">
+            <h3 className="heading-primary mb-4 text-xl font-semibold">Tips</h3>
+            <ContentList items={tips} loading={contentLoading} currentDay={selectedDay} />
+          </article>
+        </section>
+      </div>
+    </AppShell>
+  );
+}
+
+function ContentList({ items, loading, currentDay }: { items: ContentItem[]; loading: boolean; currentDay: number | "" }) {
+  if (loading) {
+    return <div className="panel-muted px-4 py-3 text-sm">Loading content...</div>;
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="panel-muted px-4 py-3 text-sm">
+        {currentDay ? `No content available for Day ${currentDay} in your plan and BMI category yet.` : "Select a published day to view content."}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {items.map((item) => (
+        <div key={item.id} className="dark-card px-4 py-4 text-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h4 className="heading-primary text-lg font-semibold">{item.title}</h4>
+              <p className="text-muted mt-1 leading-6">{item.description}</p>
+            </div>
+            <span className="theme-badge">
+              {getPlanLevelLabel(item.planLevel)}
+            </span>
+          </div>
+          <div className="text-faint mt-3 flex flex-wrap gap-2 text-xs uppercase tracking-[0.18em]">
+            <span>{getContentTypeLabel(item.type)}</span>
+            <span>Day {item.dayNumber}</span>
+            <span>{getBmiCategoryLabel(item.bmiCategory)}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
