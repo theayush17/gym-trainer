@@ -109,7 +109,7 @@ export function AppSidebar({
           </nav>
 
           {/* Bottom Actions Section */}
-          <div className="mt-auto space-y-2 border-t border-slate-100 pt-4 dark:border-gray-800 px-1">
+          <div className="mt-auto mb-6 md:mb-0 space-y-2 border-t border-slate-100 pt-4 dark:border-gray-800 px-1">
             <Link
               href="/settings"
               onClick={onClose}
