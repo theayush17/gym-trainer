@@ -1,8 +1,9 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
-import { getPlanById, getPlanLabelFromLevel, getPlanLevelFromPlanId } from "@/lib/plans";
+import { getPlanById, getPlanLabelFromLevel, getPlanLevelFromPlanId, PLANS } from "@/lib/plans";
 import { useRouteProtection } from "@/hooks/use-route-protection";
 import type { ContentItem } from "@/lib/content";
 import { getBmiCategoryLabel, getContentTypeLabel, getPlanLevelLabel, getPublishedDays, isContentVisible } from "@/lib/content";
@@ -30,6 +31,7 @@ export default function DashboardPage() {
 }
 
 function DashboardPageContent() {
+  const router = useRouter();
   const { user, profile, loading, canRender, refreshProfile, subscriptionState } = useRouteProtection("dashboard");
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
   const [allVisibleItems, setAllVisibleItems] = useState<ContentItem[]>([]);
@@ -329,16 +331,6 @@ function DashboardPageContent() {
               </div>
             )}
           </div>
-
-          <div className="panel-surface">
-            <p className="text-soft text-sm">BMI Profile</p>
-            <h2 className="heading-primary mt-2 text-xl font-semibold capitalize">
-              {derivedBmiCategory ? getBmiCategoryLabel(derivedBmiCategory) : "-"}
-            </h2>
-            <p className="text-muted mt-2 text-sm">
-              BMI score: {profile?.bmi || "-"} | Status: {subscriptionState}
-            </p>
-          </div>
         </section>
 
         <section className="grid gap-6 lg:grid-cols-3">
@@ -364,8 +356,8 @@ function DashboardPageContent() {
 
 function PageLoader({ label }: { label: string }) {
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <div className="panel-surface text-muted px-6 py-4 text-sm">{label}</div>
+    <main className="flex min-h-[400px] w-full items-center justify-center p-6">
+      <div className="panel-surface text-muted mx-auto max-w-md px-6 py-4 text-sm">{label}</div>
     </main>
   );
 }

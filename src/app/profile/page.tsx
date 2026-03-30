@@ -9,7 +9,7 @@ import { db } from "@/lib/firebase";
 import { calculateBmi, getBmiCategory } from "@/lib/bmi";
 import { dismissToast, notifyError, notifyLoading, notifySuccess, notifyWarning } from "@/lib/toast";
 
-type EditableField = "name" | "email" | "phoneNumber" | "weight" | "height" | "bmi";
+type EditableField = "phoneNumber" | "weight" | "height";
 
 export default function ProfilePage() {
   return (
@@ -23,23 +23,23 @@ function ProfilePageContent() {
   const { user, profile, loading, canRender, refreshProfile } = useRouteProtection("authenticated");
   const [editingField, setEditingField] = useState<EditableField | null>(null);
   const [drafts, setDrafts] = useState<Record<EditableField, string>>({
-    name: "",
-    email: "",
     phoneNumber: "",
     weight: "",
-    height: "",
-    bmi: ""
+    height: ""
   });
   const [savingField, setSavingField] = useState<EditableField | null>(null);
 
+  // Computed Values
+  const bmiValue = calculateBmi(profile?.weight || 0, profile?.height || 0);
+  const bmiCategory = getBmiCategory(bmiValue);
+
   const profileValues = useMemo(
     () => ({
-      name: profile?.name || "",
-      email: profile?.email || user?.email || "",
+      name: profile?.name || "Member",
+      email: profile?.email || user?.email || "No email",
       phoneNumber: profile?.phoneNumber || "",
       weight: profile?.weight ? String(profile.weight) : "",
-      height: profile?.height ? String(profile.height) : "",
-      bmi: profile?.bmi ? String(profile.bmi) : ""
+      height: profile?.height ? String(profile.height) : ""
     }),
     [profile, user?.email]
   );
@@ -77,28 +77,15 @@ function ProfilePageContent() {
 
       const currentWeight = field === "weight" ? parsedValue : Number(profileValues.weight || 0);
       const currentHeight = field === "height" ? parsedValue : Number(profileValues.height || 0);
-      const bmi = calculateBmi(currentWeight, currentHeight);
+      
+      // Auto-calculate BMI for storage if needed, but we mostly use computed frontend values
+      const newBmi = calculateBmi(currentWeight, currentHeight);
 
       updates = {
         ...updates,
-        [field]: parsedValue
-      };
-
-      if (bmi > 0) {
-        updates.bmi = bmi;
-        updates.bmiCategory = getBmiCategory(bmi);
-      }
-    } else if (field === "bmi") {
-      const parsedValue = Number(nextValue);
-      if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-        notifyWarning("BMI must be a valid number");
-        return;
-      }
-
-      updates = {
-        ...updates,
-        bmi: parsedValue,
-        bmiCategory: getBmiCategory(parsedValue)
+        [field]: parsedValue,
+        bmi: newBmi,
+        bmiCategory: getBmiCategory(newBmi)
       };
     } else {
       updates = {
@@ -125,49 +112,44 @@ function ProfilePageContent() {
     }
   };
 
+  const BmiBadge = ({ category }: { category: string }) => {
+    const colors: Record<string, string> = {
+      underweight: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200",
+      normal: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200",
+      overweight: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200"
+    };
+
+    return (
+      <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider ${colors[category] || "bg-slate-100 text-slate-700"}`}>
+        {category}
+      </span>
+    );
+  };
+
   if (loading || !canRender) {
     return <PageLoader label="Loading profile..." />;
   }
 
   return (
     <AppShell title="Profile">
-      <div className="mx-auto max-w-4xl space-y-6">
-        <section className="panel-surface">
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-xl font-semibold text-white">
-              {(profile?.name?.charAt(0) || "U").toUpperCase()}
+      <div className="mx-auto max-w-4xl space-y-8">
+        <section className="panel-surface p-6 md:p-8">
+          <div className="flex flex-col items-center gap-6 text-center md:flex-row md:text-left">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-rose-600 text-3xl font-bold text-white shadow-lg shadow-rose-200 dark:shadow-none">
+              {profileValues.name.charAt(0).toUpperCase()}
             </div>
-            <div>
-              <h2 className="heading-primary text-2xl font-bold">Your Profile</h2>
-              <p className="text-muted mt-1 text-sm">View and update the details stored in Firestore.</p>
+            <div className="space-y-1">
+              <h2 className="heading-primary text-3xl font-extrabold">{profileValues.name}</h2>
+              <p className="text-muted text-lg">{profileValues.email}</p>
+              <div className="mt-2 flex flex-wrap justify-center gap-2 md:justify-start">
+                <span className="theme-badge">Role: {profile?.role || "User"}</span>
+                <span className="theme-badge">UID: {user?.uid.slice(0, 8)}...</span>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="grid gap-5 md:grid-cols-2">
-          <ProfileFieldCard
-            label="Name"
-            value={profileValues.name}
-            editing={editingField === "name"}
-            draftValue={drafts.name}
-            saving={savingField === "name"}
-            onEdit={() => beginEdit("name")}
-            onCancel={cancelEdit}
-            onChange={(value) => setDrafts((current) => ({ ...current, name: value }))}
-            onSave={() => void saveField("name")}
-          />
-          <ProfileFieldCard
-            label="Email"
-            value={profileValues.email}
-            inputType="email"
-            editing={editingField === "email"}
-            draftValue={drafts.email}
-            saving={savingField === "email"}
-            onEdit={() => beginEdit("email")}
-            onCancel={cancelEdit}
-            onChange={(value) => setDrafts((current) => ({ ...current, email: value }))}
-            onSave={() => void saveField("email")}
-          />
+        <div className="grid gap-6 md:grid-cols-2">
           <ProfileFieldCard
             label="Phone Number"
             value={profileValues.phoneNumber}
@@ -205,17 +187,19 @@ function ProfilePageContent() {
             onSave={() => void saveField("height")}
           />
           <ProfileFieldCard
-            label="BMI"
-            value={profileValues.bmi}
-            inputType="number"
-            editing={editingField === "bmi"}
-            draftValue={drafts.bmi}
-            saving={savingField === "bmi"}
-            onEdit={() => beginEdit("bmi")}
-            onCancel={cancelEdit}
-            onChange={(value) => setDrafts((current) => ({ ...current, bmi: value }))}
-            onSave={() => void saveField("bmi")}
+            label="Computed BMI"
+            value={String(bmiValue || "-")}
+            readOnly
+            badge={<BmiBadge category={bmiCategory} />}
           />
+        </div>
+
+        <section className="panel-muted rounded-2xl p-6 text-sm">
+          <p className="font-semibold text-slate-800 dark:text-slate-100">Why can&apos;t I edit everything?</p>
+          <p className="mt-2 leading-relaxed">
+            Basic account details like name and email are synced with your authentication provider. 
+            BMI is automatically calculated based on your weight and height to ensure accuracy.
+          </p>
         </section>
       </div>
     </AppShell>
@@ -224,25 +208,19 @@ function ProfilePageContent() {
 
 function PageLoader({ label }: { label: string }) {
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <div className="loading-card">{label}</div>
+    <main className="flex min-h-[400px] w-full items-center justify-center p-6">
+      <div className="loading-card mx-auto max-w-md">{label}</div>
     </main>
   );
 }
 
 function getFieldLabel(field: EditableField) {
   switch (field) {
-    case "name":
-      return "Name";
-    case "email":
-      return "Email";
     case "phoneNumber":
       return "Phone Number";
     case "weight":
       return "Weight";
     case "height":
       return "Height";
-    case "bmi":
-      return "BMI";
   }
 }
