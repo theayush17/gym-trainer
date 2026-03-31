@@ -1,8 +1,7 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Script from "next/script";
 import { PLANS, getPlanLabelFromLevel } from "@/lib/plans";
 import { useRouteProtection } from "@/hooks/use-route-protection";
 import { getEffectiveSubscription, hasPendingRenewal, canRenewSubscription } from "@/lib/auth";
@@ -28,6 +27,7 @@ function PlansPageContent() {
   const searchParams = useSearchParams();
   const [loadingPlanId, setLoadingPlanId] = useState("");
   const { user, profile, loading, canRender, refreshProfile, subscriptionState } = useRouteProtection("plans");
+
   const isExpiredFlow = searchParams.get("reason") === "expired" || subscriptionState === "expired";
   const activeSubscription = getEffectiveSubscription(profile?.subscription);
   const currentPlanId = activeSubscription?.planId || "";
@@ -48,7 +48,6 @@ function PlansPageContent() {
     const planLevel = plan.level;
     const isDowngrade = planLevel < currentPlanLevel && subscriptionState === "active" && !canRenew;
 
-    // If it's a downgrade, we don't need Razorpay (it's a scheduled change)
     if (isDowngrade) {
       setLoadingPlanId(planId);
       const loadingToast = notifyLoading("Scheduling downgrade...");
@@ -81,12 +80,15 @@ function PlansPageContent() {
       return;
     }
 
-    // Otherwise, proceed with Razorpay Payment (Upgrade or Renewal)
+    if (typeof window.Razorpay === "undefined") {
+      notifyError("Payment system is not ready. Please refresh the page.");
+      return;
+    }
+
     setLoadingPlanId(planId);
     const loadingToast = notifyLoading("Initiating payment...");
 
     try {
-      // 1. Create Razorpay order on the backend
       const orderRes = await fetch("/api/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -101,7 +103,6 @@ function PlansPageContent() {
 
       dismissToast(loadingToast);
 
-      // 2. Open Razorpay Checkout
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: orderData.amount,
@@ -112,30 +113,39 @@ function PlansPageContent() {
         handler: async (response: any) => {
           const verifyToast = notifyLoading("Verifying payment...");
           try {
-            // 3. Verify payment on the backend
+            console.log("VERIFY API HIT");
+
+            const verifyPayload = {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              userId: user.uid,
+              planId: plan.id
+            };
+
+            console.log("[PlanSelection] Calling /api/verify-payment", verifyPayload);
+
             const verifyRes = await fetch("/api/verify-payment", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                userId: user.uid,
-                planId: plan.id
-              })
+              body: JSON.stringify(verifyPayload)
             });
 
             const verifyData = await verifyRes.json();
-            if (!verifyRes.ok) throw new Error(verifyData.error || "Payment verification failed");
+            console.log("[PlanSelection] /api/verify-payment response", verifyData);
 
-            await refreshProfile();
+            if (!verifyRes.ok || !verifyData.success) {
+              throw new Error(verifyData.error || "Payment verification failed");
+            }
+
             dismissToast(verifyToast);
-            notifySuccess("Payment successful! Subscription activated.");
-            router.replace("/dashboard");
+            notifySuccess("Plan activated successfully.");
+            window.location.href = "/dashboard";
           } catch (err) {
-            console.error("Verification error:", err);
+            console.error("[PlanSelection] Verification error:", err);
             dismissToast(verifyToast);
             notifyError(err instanceof Error ? err.message : "Verification failed");
+            setLoadingPlanId("");
           }
         },
         prefill: {
@@ -144,17 +154,18 @@ function PlansPageContent() {
           contact: profile?.phoneNumber || ""
         },
         theme: {
-          color: "#e11d48" // rose-600
+          color: "#e11d48"
         },
         modal: {
           ondismiss: () => {
+            notifyWarning("Payment was not completed.");
             setLoadingPlanId("");
           }
         }
       };
 
       const rzp = new window.Razorpay(options);
-      
+
       rzp.on("payment.failed", (response: any) => {
         notifyError(`Payment failed: ${response.error.description}`);
         setLoadingPlanId("");
@@ -162,9 +173,9 @@ function PlansPageContent() {
 
       rzp.open();
     } catch (error) {
-      console.error("Subscription error:", error);
+      console.error("[PlanSelection] Payment initiation error:", error);
       dismissToast(loadingToast);
-      notifyError(error instanceof Error ? error.message : "Failed to initiate subscription");
+      notifyError(error instanceof Error ? error.message : "Failed to initiate payment");
       setLoadingPlanId("");
     }
   };
@@ -175,12 +186,6 @@ function PlansPageContent() {
 
   return (
     <AppShell title="Plans">
-      <Script
-        id="razorpay-checkout-js"
-        src="https://checkout.razorpay.com/v1/checkout.js"
-        strategy="beforeInteractive"
-      />
-      
       <section className="w-full max-w-6xl space-y-8">
         <div className="space-y-3 text-center">
           <h1 className="heading-primary text-4xl font-bold tracking-tight">Choose your plan</h1>
@@ -197,7 +202,7 @@ function PlansPageContent() {
 
         {renewalQueued ? (
           <div className="mx-auto max-w-2xl rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-center text-sm text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-200">
-            {profile?.subscription?.renewalPlanLevel && profile.subscription.renewalPlanLevel < (activeSubscription?.planLevel || 0) 
+            {profile?.subscription?.renewalPlanLevel && profile.subscription.renewalPlanLevel < (activeSubscription?.planLevel || 0)
               ? `A downgrade to Plan ${getPlanLabelFromLevel(profile.subscription.renewalPlanLevel)} is scheduled.`
               : `A renewal is already scheduled for your next cycle.`}
           </div>
@@ -207,7 +212,7 @@ function PlansPageContent() {
           {PLANS.map((plan) => {
             const isCurrentPlan = subscriptionState === "active" && currentPlanId === plan.id;
             const isQueuedPlan = renewalQueued && profile?.subscription?.renewalPlanId === plan.id;
-            
+
             let buttonLabel = "Subscribe";
             let isDisabled = loadingPlanId !== "" || isQueuedPlan;
 

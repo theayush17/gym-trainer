@@ -76,12 +76,22 @@ export function getSubscriptionState(subscription?: UserSubscription): Subscript
   const activeSubscription = getEffectiveSubscription(subscription);
 
   if (!activeSubscription?.planId || activeSubscription.status !== "active" || !activeSubscription.expiry) {
+    if (activeSubscription?.planId) {
+      console.log("[SubscriptionCheck] Found plan but state is not active:", {
+        status: activeSubscription.status,
+        hasExpiry: !!activeSubscription.expiry
+      });
+    }
     return "no_plan";
   }
 
   const expiryTime = new Date(activeSubscription.expiry).getTime();
 
   if (Number.isNaN(expiryTime) || expiryTime <= Date.now()) {
+    console.log("[SubscriptionCheck] Plan expired or invalid date:", {
+      expiry: activeSubscription.expiry,
+      now: new Date().toISOString()
+    });
     return "expired";
   }
 

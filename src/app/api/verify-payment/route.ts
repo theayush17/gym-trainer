@@ -1,60 +1,64 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { doc, getDoc, updateDoc, collection, addDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { firebaseAdminDb } from "@/lib/firebaseAdmin";
 import { buildSubscriptionUpdate } from "@/lib/auth";
 import { PLANS } from "@/lib/plans";
 
+export const runtime = "nodejs";
+
 export async function POST(req: Request) {
   try {
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-      userId,
-      planId
-    } = await req.json();
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId, planId } = await req.json();
 
-    // Verify signature
-    const text = `${razorpay_order_id}|${razorpay_payment_id}`;
-    const generated_signature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
-      .update(text)
-      .digest("hex");
-
-    if (generated_signature !== razorpay_signature) {
-      return NextResponse.json({ error: "Invalid payment signature" }, { status: 400 });
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !userId || !planId) {
+      return NextResponse.json({ success: false, error: "Missing payload" }, { status: 400 });
     }
 
-    // Get user profile
-    const userRef = doc(db, "users", userId);
-    const userSnap = await getDoc(userRef);
+    // 1. Verify Razorpay Signature
+    const secret = process.env.RAZORPAY_KEY_SECRET!;
+    const hmac = crypto.createHmac("sha256", secret);
+    hmac.update(razorpay_order_id + "|" + razorpay_payment_id);
+    const expected = hmac.digest("hex");
 
-    if (!userSnap.exists()) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (expected !== razorpay_signature) {
+      return NextResponse.json({ success: false, error: "Invalid signature" }, { status: 400 });
+    }
+
+    // 2. Fetch/Create User using Admin SDK
+    const userRef = firebaseAdminDb.collection("users").doc(userId);
+    const userSnap = await userRef.get();
+
+    if (!userSnap.exists) {
+      await userRef.set({
+        uid: userId,
+        role: "user",
+        createdAt: new Date().toISOString()
+      }, { merge: true });
     }
 
     const userData = userSnap.data();
-    const plan = PLANS.find((p) => p.id === planId);
-    
-    if (!plan) {
-      return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
-    }
+    const plan = PLANS.find(p => p.id === planId);
+    if (!plan) return NextResponse.json({ success: false, error: "Invalid plan" }, { status: 400 });
 
+    // 3. Prepare Update
     const updatedSubscription = buildSubscriptionUpdate({
-      currentSubscription: userData.subscription,
+      currentSubscription: userData?.subscription,
       planId: plan.id,
       planLevel: plan.level
     });
 
-    // Update Firestore user document
-    await updateDoc(userRef, {
+    console.log("[VerifyPayment] Writing state to Firestore for userId:", userId);
+
+    // 4. Atomic Write
+    const batch = firebaseAdminDb.batch();
+    
+    batch.set(userRef, {
       subscription: updatedSubscription,
       updatedAt: new Date().toISOString()
-    });
+    }, { merge: true });
 
-    // Record transaction
-    await addDoc(collection(db, "transactions"), {
+    const transactionRef = firebaseAdminDb.collection("transactions").doc();
+    batch.set(transactionRef, {
       userId,
       planId,
       amount: plan.numericPrice,
@@ -63,9 +67,16 @@ export async function POST(req: Request) {
       createdAt: new Date().toISOString()
     });
 
+    await batch.commit();
+
+    console.log("[VerifyPayment] SUCCESS for userId:", userId);
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Payment verification error:", error);
-    return NextResponse.json({ error: "Internal server error during verification" }, { status: 500 });
+
+  } catch (err) {
+    console.error("[VerifyPayment] FATAL ERROR:", err);
+    return NextResponse.json({ 
+      success: false, 
+      error: err instanceof Error ? err.message : "Internal error" 
+    }, { status: 500 });
   }
 }

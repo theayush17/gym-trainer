@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { onAuthStateChanged, type User } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, getDocFromServer } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { getSubscriptionState, type SubscriptionState, type UserProfile } from "@/lib/auth";
 import { STORAGE_UID_KEY } from "@/lib/plans";
@@ -15,7 +15,7 @@ type AuthContextValue = {
   profileLoading: boolean;
   loading: boolean;
   subscriptionState: SubscriptionState;
-  refreshProfile: () => Promise<void>;
+  refreshProfile: () => Promise<UserProfile | null>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -46,21 +46,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authLoading, setAuthLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
 
-  const loadProfile = useCallback(async (uid: string) => {
+  const loadProfile = useCallback(async (uid: string, forceRefresh = false) => {
+    setProfileLoading(true);
+
     try {
-      const snapshot = await withTimeout(getDoc(doc(db, "users", uid)), PROFILE_LOAD_TIMEOUT_MS, "Profile load");
+      const docRef = doc(db, "users", uid);
+      const snapshot = forceRefresh 
+        ? await withTimeout(getDocFromServer(docRef), PROFILE_LOAD_TIMEOUT_MS, "Profile refresh")
+        : await withTimeout(getDoc(docRef), PROFILE_LOAD_TIMEOUT_MS, "Profile load");
 
       if (!snapshot.exists()) {
         setProfile(null);
-        console.log("No Firestore user document found for UID:", uid);
-        return;
+        return null;
       }
 
-      setProfile(snapshot.data() as UserProfile);
-      console.log("Loaded Firestore profile for UID:", uid);
+      const data = snapshot.data() as UserProfile;
+      setProfile(data);
+      console.log(`Loaded Firestore profile for UID: ${uid} (Forced: ${forceRefresh})`);
+      return data;
     } catch (error) {
       console.error("Profile load error:", error);
       setProfile(null);
+      return null;
     } finally {
       setProfileLoading(false);
     }
@@ -70,11 +77,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auth.currentUser?.uid) {
       setProfile(null);
       setProfileLoading(false);
-      return;
+      return null;
     }
 
     setProfileLoading(true);
-    await loadProfile(auth.currentUser.uid);
+    return await loadProfile(auth.currentUser.uid, true);
   }, [loadProfile]);
 
   useEffect(() => {
@@ -112,7 +119,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         localStorage.setItem(STORAGE_UID_KEY, firebaseUser.uid);
-        loadProfile(firebaseUser.uid).catch((err) => {
+        // Force server fetch on initial login to bypass stale browser cache
+        loadProfile(firebaseUser.uid, true).catch((err) => {
           console.error("Async loadProfile error:", err);
           setProfileLoading(false);
         });
