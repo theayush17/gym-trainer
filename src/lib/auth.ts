@@ -103,14 +103,16 @@ export function getCurrentSubscriptionDay(subscription?: UserSubscription) {
     return 0;
   }
 
-  const startTime = startDate.getTime();
-  const now = Date.now();
+  // Calculate day number based on calendar days to ensure it increments at midnight
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
 
-  if (startTime > now) {
-    return 0;
-  }
-
-  const diffInDays = Math.floor((now - startTime) / (1000 * 60 * 60 * 24)) + 1;
+  const diffInMs = now.getTime() - start.getTime();
+  const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24)) + 1;
+  
   return Math.min(Math.max(diffInDays, 1), SUBSCRIPTION_DURATION_DAYS);
 }
 
@@ -128,6 +130,7 @@ export function getExpiryCountdown(subscription?: UserSubscription) {
   }
 
   const diff = expiryTime - Date.now();
+  // Using ceil ensures that even if there's 1 second left, it shows as 1 day
   return Math.max(Math.ceil(diff / (1000 * 60 * 60 * 24)), 0);
 }
 
@@ -147,7 +150,8 @@ export function getSubscriptionStartDate(subscription?: UserSubscription) {
 
     if (!Number.isNaN(expiryDate.getTime())) {
       const derivedStartDate = new Date(expiryDate);
-      derivedStartDate.setDate(derivedStartDate.getDate() - (SUBSCRIPTION_DURATION_DAYS - 1));
+      // If expiry is start + 30 days, then start is expiry - 30 days
+      derivedStartDate.setDate(derivedStartDate.getDate() - SUBSCRIPTION_DURATION_DAYS);
       return derivedStartDate;
     }
   }
@@ -192,12 +196,17 @@ export function buildSubscriptionUpdate({
   // UPGRADE LOGIC (Immediate) or RENEWAL LOGIC (Immediate if within window or expired)
   // This covers Rule 1 (Upgrade), Rule 5 (Renew Same), Rule 6 (Renew Upgrade), Rule 7 (Renew Downgrade)
   if (isExpired || planLevel > activeLevel || withinRenewalWindow) {
+    // Preserve the original start date if this is an upgrade of an active plan
+    // This ensures the "Journey Day" (e.g., Day 2) doesn't reset to Day 1 on upgrade
+    const existingStartDate = activeSubscription?.subscriptionStartDate || currentSubscription?.subscriptionStartDate;
+    const shouldPreserveDate = !isExpired && planLevel > activeLevel && !!existingStartDate;
+
     return {
       planId,
       planLevel,
       status: "active",
       expiry: addSubscriptionDuration(now).toISOString(),
-      subscriptionStartDate: now.toISOString(),
+      subscriptionStartDate: shouldPreserveDate ? existingStartDate : now.toISOString(),
       renewalPlanId: "",
       renewalPlanLevel: 0,
       renewalStartDate: "",

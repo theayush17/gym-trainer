@@ -2,12 +2,18 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { db } from "@/lib/firebase";
-import { getPlanLevelFromPlanId, PLANS, getPlanLabelFromLevel } from "@/lib/plans";
+import Script from "next/script";
+import { PLANS, getPlanLabelFromLevel } from "@/lib/plans";
 import { useRouteProtection } from "@/hooks/use-route-protection";
-import { buildSubscriptionUpdate, getEffectiveSubscription, hasPendingRenewal, canRenewSubscription } from "@/lib/auth";
+import { getEffectiveSubscription, hasPendingRenewal, canRenewSubscription } from "@/lib/auth";
 import { dismissToast, notifyError, notifyLoading, notifySuccess, notifyWarning } from "@/lib/toast";
 import { AppShell } from "@/components/app-shell";
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 export default function PlansPage() {
   return (
@@ -25,7 +31,7 @@ function PlansPageContent() {
   const isExpiredFlow = searchParams.get("reason") === "expired" || subscriptionState === "expired";
   const activeSubscription = getEffectiveSubscription(profile?.subscription);
   const currentPlanId = activeSubscription?.planId || "";
-  const currentPlanLevel = activeSubscription?.planLevel || getPlanLevelFromPlanId(currentPlanId);
+  const currentPlanLevel = activeSubscription?.planLevel || 0;
   const renewalQueued = hasPendingRenewal(profile?.subscription);
   const canRenew = canRenewSubscription(profile?.subscription);
 
@@ -36,52 +42,129 @@ function PlansPageContent() {
       return;
     }
 
+    const plan = PLANS.find((p) => p.id === planId);
+    if (!plan) return;
+
+    const planLevel = plan.level;
+    const isDowngrade = planLevel < currentPlanLevel && subscriptionState === "active" && !canRenew;
+
+    // If it's a downgrade, we don't need Razorpay (it's a scheduled change)
+    if (isDowngrade) {
+      setLoadingPlanId(planId);
+      const loadingToast = notifyLoading("Scheduling downgrade...");
+      try {
+        const { doc, updateDoc } = await import("firebase/firestore");
+        const { db } = await import("@/lib/firebase");
+        const { buildSubscriptionUpdate } = await import("@/lib/auth");
+
+        const updatedSubscription = buildSubscriptionUpdate({
+          currentSubscription: profile?.subscription,
+          planId,
+          planLevel
+        });
+
+        await updateDoc(doc(db, "users", user.uid), {
+          subscription: updatedSubscription,
+          updatedAt: new Date().toISOString()
+        });
+
+        await refreshProfile();
+        dismissToast(loadingToast);
+        notifySuccess(`Plan ${plan.label} scheduled for next cycle.`);
+        router.replace("/dashboard");
+      } catch (error) {
+        dismissToast(loadingToast);
+        notifyError("Failed to schedule downgrade");
+      } finally {
+        setLoadingPlanId("");
+      }
+      return;
+    }
+
+    // Otherwise, proceed with Razorpay Payment (Upgrade or Renewal)
     setLoadingPlanId(planId);
-    const loadingToast = notifyLoading("Updating subscription...");
+    const loadingToast = notifyLoading("Initiating payment...");
 
     try {
-      const { doc, updateDoc, collection, addDoc } = await import("firebase/firestore");
-      const plan = PLANS.find((p) => p.id === planId);
-      const planLevel = plan?.level ?? 0;
-
-      const updatedSubscription = buildSubscriptionUpdate({
-        currentSubscription: profile?.subscription,
-        planId,
-        planLevel
+      // 1. Create Razorpay order on the backend
+      const orderRes = await fetch("/api/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: plan.numericPrice,
+          planId: plan.id
+        })
       });
 
-      await updateDoc(doc(db, "users", user.uid), {
-        subscription: updatedSubscription,
-        updatedAt: new Date().toISOString()
-      });
-
-      // Record transaction
-      await addDoc(collection(db, "transactions"), {
-        userId: user.uid,
-        planId: planId,
-        amount: plan?.numericPrice || 0,
-        status: "active",
-        createdAt: new Date().toISOString()
-      });
-
-      await refreshProfile();
+      const orderData = await orderRes.json();
+      if (!orderRes.ok) throw new Error(orderData.error || "Failed to create order");
 
       dismissToast(loadingToast);
+
+      // 2. Open Razorpay Checkout
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "Gym Trainer",
+        description: `${plan.name} Subscription`,
+        order_id: orderData.order_id,
+        handler: async (response: any) => {
+          const verifyToast = notifyLoading("Verifying payment...");
+          try {
+            // 3. Verify payment on the backend
+            const verifyRes = await fetch("/api/verify-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                userId: user.uid,
+                planId: plan.id
+              })
+            });
+
+            const verifyData = await verifyRes.json();
+            if (!verifyRes.ok) throw new Error(verifyData.error || "Payment verification failed");
+
+            await refreshProfile();
+            dismissToast(verifyToast);
+            notifySuccess("Payment successful! Subscription activated.");
+            router.replace("/dashboard");
+          } catch (err) {
+            console.error("Verification error:", err);
+            dismissToast(verifyToast);
+            notifyError(err instanceof Error ? err.message : "Verification failed");
+          }
+        },
+        prefill: {
+          name: profile?.name || "",
+          email: profile?.email || "",
+          contact: profile?.phoneNumber || ""
+        },
+        theme: {
+          color: "#e11d48" // rose-600
+        },
+        modal: {
+          ondismiss: () => {
+            setLoadingPlanId("");
+          }
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
       
-      const isDowngrade = planLevel < currentPlanLevel && subscriptionState === "active" && !canRenew;
-      
-      if (isDowngrade) {
-        notifySuccess(`Plan ${plan?.label} scheduled for next cycle.`);
-      } else {
-        notifySuccess("Subscription updated successfully!");
-      }
-      
-      router.replace("/dashboard");
+      rzp.on("payment.failed", (response: any) => {
+        notifyError(`Payment failed: ${response.error.description}`);
+        setLoadingPlanId("");
+      });
+
+      rzp.open();
     } catch (error) {
-      console.error("Subscription update error:", error);
+      console.error("Subscription error:", error);
       dismissToast(loadingToast);
-      notifyError(error instanceof Error ? error.message : "Failed to update subscription. Please check permissions.");
-    } finally {
+      notifyError(error instanceof Error ? error.message : "Failed to initiate subscription");
       setLoadingPlanId("");
     }
   };
@@ -92,6 +175,12 @@ function PlansPageContent() {
 
   return (
     <AppShell title="Plans">
+      <Script
+        id="razorpay-checkout-js"
+        src="https://checkout.razorpay.com/v1/checkout.js"
+        strategy="beforeInteractive"
+      />
+      
       <section className="w-full max-w-6xl space-y-8">
         <div className="space-y-3 text-center">
           <h1 className="heading-primary text-4xl font-bold tracking-tight">Choose your plan</h1>
