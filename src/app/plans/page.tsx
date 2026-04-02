@@ -31,7 +31,7 @@ function PlansPageContent() {
   const isExpiredFlow = searchParams.get("reason") === "expired" || subscriptionState === "expired";
   const activeSubscription = getEffectiveSubscription(profile?.subscription);
   const currentPlanId = activeSubscription?.planId || "";
-  const currentPlanLevel = activeSubscription?.planLevel || 0;
+  const currentPlanLevel = Number(activeSubscription?.planLevel || 0);
   const renewalQueued = hasPendingRenewal(profile?.subscription);
   const canRenew = canRenewSubscription(profile?.subscription);
 
@@ -46,9 +46,18 @@ function PlansPageContent() {
     if (!plan) return;
 
     const planLevel = plan.level;
-    const isDowngrade = planLevel < currentPlanLevel && subscriptionState === "active" && !canRenew;
+    
+    // STRICT CHECK: Is this a legitimate downgrade?
+    // 1. Must have an active subscription
+    // 2. New plan level must be strictly less than current level
+    // 3. Must not be in the renewal window (where they should pay to switch/renew)
+    const isLegitDowngrade = 
+      subscriptionState === "active" && 
+      currentPlanLevel > 0 && 
+      planLevel < currentPlanLevel && 
+      !canRenew;
 
-    if (isDowngrade) {
+    if (isLegitDowngrade) {
       setLoadingPlanId(planId);
       const loadingToast = notifyLoading("Scheduling downgrade...");
       try {
@@ -72,6 +81,7 @@ function PlansPageContent() {
         notifySuccess(`Plan ${plan.label} scheduled for next cycle.`);
         router.replace("/dashboard");
       } catch (error) {
+        console.error("[PlanSelection] Downgrade error:", error);
         dismissToast(loadingToast);
         notifyError("Failed to schedule downgrade");
       } finally {
@@ -80,6 +90,7 @@ function PlansPageContent() {
       return;
     }
 
+    // ALL OTHER PATHS (New Subscribe, Upgrade, Renewal) MUST go through Razorpay
     if (typeof window.Razorpay === "undefined") {
       notifyError("Payment system is not ready. Please refresh the page.");
       return;
