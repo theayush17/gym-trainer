@@ -19,6 +19,9 @@
     "react-dom": "^18.3.1",
     "react-hot-toast": "^2.6.0"
   },
+  "overrides": {
+    "node-domexception": "1.0.0"
+  },
   "devDependencies": {
     "@types/node": "^22.10.1",
     "@types/react": "^18.3.12",
