@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import nodemailer from "nodemailer";
 
 export async function POST(request: Request) {
   try {
@@ -24,8 +25,6 @@ export async function POST(request: Request) {
       });
     }
 
-    const dynamicRequire = eval("require") as NodeRequire;
-    const nodemailer = dynamicRequire("nodemailer");
     const transporter = nodemailer.createTransport({
       host: smtpHost,
       port: Number(smtpPort),

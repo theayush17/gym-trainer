@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import nodemailer from "nodemailer";
 
 export async function POST(request: Request) {
   try {
@@ -18,8 +19,6 @@ export async function POST(request: Request) {
     if (!smtpHost || !smtpPort || !smtpUser || !smtpPass || !smtpFrom) {
       console.log(`[SIMULATED EMAIL] Unsubscription confirmed for ${email}`);
     } else {
-      const dynamicRequire = eval("require") as NodeRequire;
-      const nodemailer = dynamicRequire("nodemailer");
       const transporter = nodemailer.createTransport({
         host: smtpHost,
         port: Number(smtpPort),
