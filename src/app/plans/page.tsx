@@ -47,10 +47,7 @@ function PlansPageContent() {
 
     const planLevel = plan.level;
     
-    // STRICT CHECK: Is this a legitimate downgrade?
-    // 1. Must have an active subscription
-    // 2. New plan level must be strictly less than current level
-    // 3. Must not be in the renewal window (where they should pay to switch/renew)
+    // 1. STRICT DOWNGRADE CHECK (Deferred update, no payment)
     const isLegitDowngrade = 
       subscriptionState === "active" && 
       currentPlanLevel > 0 && 
@@ -90,7 +87,7 @@ function PlansPageContent() {
       return;
     }
 
-    // ALL OTHER PATHS (New Subscribe, Upgrade, Renewal) MUST go through Razorpay
+    // 2. ALL OTHER PATHS (New Subscribe, Upgrade, Renewal) MUST go through Razorpay
     if (typeof window.Razorpay === "undefined") {
       notifyError("Payment system is not ready. Please refresh the page.");
       return;
@@ -124,7 +121,7 @@ function PlansPageContent() {
         handler: async (response: any) => {
           const verifyToast = notifyLoading("Verifying payment...");
           try {
-            console.log("VERIFY API HIT");
+            console.log("[PaymentFlow] Razorpay handler triggered");
 
             const verifyPayload = {
               razorpay_order_id: response.razorpay_order_id,
@@ -134,8 +131,6 @@ function PlansPageContent() {
               planId: plan.id
             };
 
-            console.log("[PlanSelection] Calling /api/verify-payment", verifyPayload);
-
             const verifyRes = await fetch("/api/verify-payment", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -143,17 +138,19 @@ function PlansPageContent() {
             });
 
             const verifyData = await verifyRes.json();
-            console.log("[PlanSelection] /api/verify-payment response", verifyData);
-
+            
             if (!verifyRes.ok || !verifyData.success) {
               throw new Error(verifyData.error || "Payment verification failed");
             }
 
             dismissToast(verifyToast);
             notifySuccess("Plan activated successfully.");
+            
+            // CRITICAL: Ensure we wait for profile refresh BEFORE redirecting
+            await refreshProfile();
             window.location.href = "/dashboard";
           } catch (err) {
-            console.error("[PlanSelection] Verification error:", err);
+            console.error("[PaymentFlow] Verification error:", err);
             dismissToast(verifyToast);
             notifyError(err instanceof Error ? err.message : "Verification failed");
             setLoadingPlanId("");
@@ -169,6 +166,7 @@ function PlansPageContent() {
         },
         modal: {
           ondismiss: () => {
+            console.log("[PaymentFlow] Modal closed by user");
             notifyWarning("Payment was not completed.");
             setLoadingPlanId("");
           }
@@ -178,13 +176,14 @@ function PlansPageContent() {
       const rzp = new window.Razorpay(options);
 
       rzp.on("payment.failed", (response: any) => {
+        console.error("[PaymentFlow] Razorpay payment failed event:", response.error);
         notifyError(`Payment failed: ${response.error.description}`);
         setLoadingPlanId("");
       });
 
       rzp.open();
     } catch (error) {
-      console.error("[PlanSelection] Payment initiation error:", error);
+      console.error("[PaymentFlow] Initiation error:", error);
       dismissToast(loadingToast);
       notifyError(error instanceof Error ? error.message : "Failed to initiate payment");
       setLoadingPlanId("");

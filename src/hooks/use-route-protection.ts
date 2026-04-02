@@ -61,6 +61,7 @@ export function useRouteProtection(mode: GuardMode) {
     }
 
     if (mode === "plans" && authState.subscriptionState === "active" && !allowPlanUpgrade) {
+      console.log("[RouteProtection] Active subscriber on plans page without upgrade flag, redirecting to dashboard");
       router.replace("/dashboard");
       return;
     }
@@ -69,6 +70,7 @@ export function useRouteProtection(mode: GuardMode) {
       const destination =
         authState.subscriptionState === "expired" ? "/plans?reason=expired" : "/plans";
 
+      console.log(`[RouteProtection] Inactive subscriber (${authState.subscriptionState}) on dashboard, redirecting to: ${destination}`);
       router.replace(destination);
     }
   }, [allowPlanUpgrade, authState.profile, authState.subscriptionState, authState.user, mode, pathname, routeLoading, router]);

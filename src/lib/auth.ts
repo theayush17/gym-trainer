@@ -239,10 +239,10 @@ export function buildSubscriptionUpdate({
 
   // Fallback: No change needed (e.g., selecting same plan outside renewal window)
   return currentSubscription || {
-    planId,
-    planLevel,
-    status: "active",
-    expiry: addSubscriptionDuration(now).toISOString(),
-    subscriptionStartDate: now.toISOString()
+    planId: "",
+    planLevel: 0,
+    status: "inactive",
+    expiry: "",
+    subscriptionStartDate: ""
   };
 }
