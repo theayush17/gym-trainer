@@ -95,20 +95,39 @@ function PlansPageContent() {
 
     setLoadingPlanId(planId);
     const loadingToast = notifyLoading("Initiating payment...");
+    const requestId = Math.random().toString(36).substring(7);
+
+    console.log(`[PaymentFlow] [${requestId}] Initiating for plan: ${planId}`);
 
     try {
+      // Ensure Razorpay script is loaded. If not, try to wait or notify.
+      if (typeof window.Razorpay === "undefined") {
+        console.error(`[PaymentFlow] [${requestId}] Razorpay SDK missing`);
+        // Simple retry logic or wait
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (typeof window.Razorpay === "undefined") {
+          throw new Error("Payment system (Razorpay) failed to load. Please refresh and try again.");
+        }
+      }
+
+      console.log(`[PaymentFlow] [${requestId}] Creating backend order...`);
       const orderRes = await fetch("/api/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount: plan.numericPrice,
-          planId: plan.id
+          planId: plan.id,
+          userId: user.uid
         })
       });
 
       const orderData = await orderRes.json();
-      if (!orderRes.ok) throw new Error(orderData.error || "Failed to create order");
+      if (!orderRes.ok) {
+        console.error(`[PaymentFlow] [${requestId}] Order creation failed:`, orderData);
+        throw new Error(orderData.error || "Failed to create order. Please try again.");
+      }
 
+      console.log(`[PaymentFlow] [${requestId}] Order created: ${orderData.order_id}. Opening Razorpay...`);
       dismissToast(loadingToast);
 
       const options = {
@@ -120,9 +139,9 @@ function PlansPageContent() {
         order_id: orderData.order_id,
         handler: async (response: any) => {
           const verifyToast = notifyLoading("Verifying payment...");
-          try {
-            console.log("[PaymentFlow] Razorpay handler triggered");
+          console.log(`[PaymentFlow] [${requestId}] Payment successful, ID: ${response.razorpay_payment_id}. Verifying...`);
 
+          try {
             const verifyPayload = {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
@@ -140,17 +159,18 @@ function PlansPageContent() {
             const verifyData = await verifyRes.json();
             
             if (!verifyRes.ok || !verifyData.success) {
-              throw new Error(verifyData.error || "Payment verification failed");
+              console.error(`[PaymentFlow] [${requestId}] Verification failed:`, verifyData);
+              throw new Error(verifyData.error || "Payment verification failed. Please contact support.");
             }
 
+            console.log(`[PaymentFlow] [${requestId}] Verification SUCCESS. refreshing...`);
             dismissToast(verifyToast);
             notifySuccess("Plan activated successfully.");
             
-            // CRITICAL: Ensure we wait for profile refresh BEFORE redirecting
             await refreshProfile();
             window.location.href = "/dashboard";
           } catch (err) {
-            console.error("[PaymentFlow] Verification error:", err);
+            console.error(`[PaymentFlow] [${requestId}] Verification handler error:`, err);
             dismissToast(verifyToast);
             notifyError(err instanceof Error ? err.message : "Verification failed");
             setLoadingPlanId("");
@@ -166,26 +186,30 @@ function PlansPageContent() {
         },
         modal: {
           ondismiss: () => {
-            console.log("[PaymentFlow] Modal closed by user");
+            console.log(`[PaymentFlow] [${requestId}] Checkout modal closed by user`);
             notifyWarning("Payment was not completed.");
             setLoadingPlanId("");
-          }
-        }
+          },
+          escape: false, // Prevent closing on escape to reduce accidental closes
+          backdropclose: false // Prevent closing on backdrop click
+        },
+        "callback_url": "", // Leave empty for custom handler
+        "redirect": false
       };
 
       const rzp = new window.Razorpay(options);
 
       rzp.on("payment.failed", (response: any) => {
-        console.error("[PaymentFlow] Razorpay payment failed event:", response.error);
+        console.error(`[PaymentFlow] [${requestId}] Razorpay FAIL event:`, response.error);
         notifyError(`Payment failed: ${response.error.description}`);
         setLoadingPlanId("");
       });
 
       rzp.open();
     } catch (error) {
-      console.error("[PaymentFlow] Initiation error:", error);
+      console.error(`[PaymentFlow] [${requestId}] Initiation error:`, error);
       dismissToast(loadingToast);
-      notifyError(error instanceof Error ? error.message : "Failed to initiate payment");
+      notifyError(error instanceof Error ? error.message : "Failed to initiate payment. Please try again.");
       setLoadingPlanId("");
     }
   };
